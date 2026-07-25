@@ -4,6 +4,10 @@ Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+
 
 Audio goes to [Deepgram](https://deepgram.com) for transcription; nothing is stored.
 
+<p align="center">
+  <img src="assets/meter-demo.gif" alt="The floating meter: live level bars and a timer while recording, then a Transcribing scan animation" width="420">
+</p>
+
 ## Features
 
 - **Alt+M** to start, **Alt+M** to stop, transcribe, and paste
