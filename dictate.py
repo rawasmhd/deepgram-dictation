@@ -7,7 +7,7 @@ Deepgram dictation with a floating microphone meter.
   Ctrl+Alt+Q   quit
 
 Runs silently in the background. The only thing you see is a small
-level meter that floats in the middle of the screen while recording.
+level meter that floats just above the taskbar while recording.
 """
 
 import io
@@ -41,6 +41,7 @@ QUIT_CHAR = "q"
 
 AUTO_PASTE = True                   # False = copy to clipboard only
 RESTORE_CLIPBOARD = True
+CLIPBOARD_RESTORE_DELAY = 0.8       # seconds to let the paste land first
 BEEP = False                        # short tones on start / stop / error
 MIN_SECONDS = 0.4                   # ignore accidental taps
 
@@ -274,27 +275,51 @@ PANEL_EDGE = "#31333c"
 TEXT_DIM = "#8b8f9c"
 TEXT_BRIGHT = "#e7e9ee"
 BAR_IDLE = (58, 61, 71)
+BAR_IDLE_HEX = "#%02x%02x%02x" % BAR_IDLE
 BAR_LOW = (56, 189, 160)
 BAR_HIGH = (125, 211, 252)
 REC_RED = "#f05454"
 ERR_RED = "#ff6b6b"
 
 
-def work_area_bottom(fallback: int) -> int:
-    """Bottom edge of the usable desktop (screen minus the taskbar)."""
+class _POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+class _RECT(ctypes.Structure):
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", _RECT),
+                ("rcWork", _RECT), ("dwFlags", ctypes.c_ulong)]
+
+
+def screen_work_area(win):
+    """(left, top, right, bottom) of the usable area (screen minus the
+    taskbar) of the monitor under the cursor. Falls back to the primary
+    screen reported by tkinter."""
     if IS_WINDOWS:
         try:
-            class RECT(ctypes.Structure):
-                _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                            ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-            rect = RECT()
-            SPI_GETWORKAREA = 0x0030
-            if ctypes.windll.user32.SystemParametersInfoW(
-                    SPI_GETWORKAREA, 0, ctypes.byref(rect), 0):
-                return rect.bottom
+            u = ctypes.windll.user32
+            u.MonitorFromPoint.restype = ctypes.c_void_p
+            u.MonitorFromPoint.argtypes = [_POINT, ctypes.c_ulong]
+            u.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+
+            pt = _POINT()
+            u.GetCursorPos(ctypes.byref(pt))
+            MONITOR_DEFAULTTONEAREST = 2
+            hmon = u.MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+
+            mi = _MONITORINFO()
+            mi.cbSize = ctypes.sizeof(_MONITORINFO)
+            if u.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+                r = mi.rcWork
+                return r.left, r.top, r.right, r.bottom
         except Exception:
             pass
-    return fallback
+    return 0, 0, win.winfo_screenwidth(), win.winfo_screenheight()
 
 
 def mix(c1, c2, t):
@@ -360,8 +385,7 @@ class Overlay:
                       for i in range(self.BARS)]
         self.bars = [
             self.c.create_rectangle(x1, cy - 1, x2, cy + 1,
-                                    fill=mix(BAR_IDLE, BAR_IDLE, 0),
-                                    outline="")
+                                    fill=BAR_IDLE_HEX, outline="")
             for x1, x2 in self.bar_x
         ]
 
@@ -372,18 +396,18 @@ class Overlay:
     # -- window plumbing --------------------------------------------------
 
     def place(self):
-        sw = self.win.winfo_screenwidth()
-        sh = self.win.winfo_screenheight()
-        x = (sw - self.W) // 2
+        left, top, right, bottom = screen_work_area(self.win)
+        span = bottom - top
+        x = left + (right - left - self.W) // 2
         if OVERLAY_POSITION == "top":
-            y = int(sh * 0.12)
+            y = top + int(span * 0.12)
         elif OVERLAY_POSITION == "taskbar":
             # sit just above the taskbar, using the desktop work area
-            y = work_area_bottom(sh) - self.H - OVERLAY_MARGIN
+            y = bottom - self.H - OVERLAY_MARGIN
         elif OVERLAY_POSITION == "bottom":
-            y = int(sh * 0.80)
+            y = top + int(span * 0.80)
         else:
-            y = (sh - self.H) // 2
+            y = top + (span - self.H) // 2
         self.win.geometry(f"{self.W}x{self.H}+{x}+{y}")
 
     def make_passthrough(self):
@@ -462,7 +486,7 @@ class Overlay:
                                           self.history):
                 h = max(1.5, lvl * self.MAX_BAR)
                 self.c.coords(bar, x1, cy - h, x2, cy + h)
-                colour = (mix(BAR_IDLE, BAR_IDLE, 0) if lvl < 0.02
+                colour = (BAR_IDLE_HEX if lvl < 0.02
                           else mix(BAR_LOW, BAR_HIGH, lvl))
                 self.c.itemconfigure(bar, fill=colour)
 
@@ -540,9 +564,12 @@ def deliver(text: str):
         kbd.release("v")
 
     if previous is not None:
-        time.sleep(0.5)
+        time.sleep(CLIPBOARD_RESTORE_DELAY)
         try:
-            pyperclip.copy(previous)
+            # only restore if nothing else grabbed the clipboard meanwhile,
+            # so we never clobber something the user copied after pasting
+            if pyperclip.paste() == text:
+                pyperclip.copy(previous)
         except Exception:
             pass
 
@@ -562,6 +589,7 @@ MOD_KEYS = {
     "win": {keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r},
 }
 held = set()
+fired = set()               # trigger keys currently held that already fired
 
 
 def key_matches(key, wanted_char: str) -> bool:
@@ -570,6 +598,11 @@ def key_matches(key, wanted_char: str) -> bool:
         return True
     # with modifiers held the char can be a control code or symbol
     return getattr(key, "vk", None) == ord(wanted_char.upper())
+
+
+def trigger_id(key):
+    """Stable identity for a non-modifier key, across press and release."""
+    return getattr(key, "vk", None) or getattr(key, "char", None)
 
 
 def handle_toggle():
@@ -635,9 +668,18 @@ def on_press(key):
         if key in keys:
             held.add(name)
             return
-    if held == HOTKEY_MODIFIERS and key_matches(key, HOTKEY_CHAR):
+
+    kid = trigger_id(key)
+    if kid in fired:            # keyboard auto-repeat while the key is held
+        return
+
+    # subset (not exact) match, so a stray/stuck extra modifier does not
+    # silently disable the hotkey
+    if HOTKEY_MODIFIERS <= held and key_matches(key, HOTKEY_CHAR):
+        fired.add(kid)
         threading.Thread(target=handle_toggle, daemon=True).start()
-    elif held == QUIT_MODIFIERS and key_matches(key, QUIT_CHAR):
+    elif QUIT_MODIFIERS <= held and key_matches(key, QUIT_CHAR):
+        fired.add(kid)
         ui.put(("quit", None))
 
 
@@ -646,6 +688,7 @@ def on_release(key):
         if key in keys:
             held.discard(name)
             return
+    fired.discard(trigger_id(key))
 
 
 # ----------------------------------------------------------------------------
