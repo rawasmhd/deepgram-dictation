@@ -13,6 +13,7 @@ level meter that floats just above the taskbar while recording.
 import io
 import os
 import sys
+import json
 import math
 import time
 import wave
@@ -21,6 +22,7 @@ import ctypes
 import threading
 import platform
 from pathlib import Path
+from urllib.parse import urlencode
 from collections import deque
 
 import numpy as np
@@ -28,6 +30,11 @@ import requests
 import sounddevice as sd
 import pyperclip
 from pynput import keyboard
+
+try:
+    import websocket                    # websocket-client, for streaming mode
+except Exception:
+    websocket = None
 
 # ----------------------------------------------------------------------------
 # Config
@@ -38,6 +45,16 @@ HOTKEY_CHAR = "m"
 
 QUIT_MODIFIERS = {"ctrl", "alt"}
 QUIT_CHAR = "q"
+
+# Transcription mode:
+#   "streaming" - audio is sent to Deepgram live over a WebSocket while you
+#                 talk, so the text is ready almost the moment you stop (low
+#                 latency). This is the default. Needs the websocket-client
+#                 package; falls back to "batch" automatically if it is missing
+#                 or the connection fails.
+#   "batch"     - the whole clip is uploaded after you stop, then transcribed.
+#                 Simpler, but the wait grows with how long you spoke.
+TRANSCRIBE_MODE = "streaming"       # "streaming" | "batch"
 
 AUTO_PASTE = True                   # False = copy to clipboard only
 RESTORE_CLIPBOARD = True
@@ -61,9 +78,19 @@ DG_PARAMS = {
 }
 
 ENDPOINT = "https://api.deepgram.com/v1/listen"
+STREAM_ENDPOINT = "wss://api.deepgram.com/v1/listen"
 SAMPLE_RATE = 16_000
 CHANNELS = 1
 SAMPLE_WIDTH = 2
+
+# Extra params the streaming endpoint needs to interpret the raw PCM we send.
+STREAM_PARAMS = {
+    **DG_PARAMS,
+    "encoding": "linear16",
+    "sample_rate": str(SAMPLE_RATE),
+    "channels": str(CHANNELS),
+    "interim_results": "false",     # only finalized text, like batch
+}
 
 IS_WINDOWS = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
@@ -213,6 +240,7 @@ class Recorder:
     def __init__(self):
         self._chunks = []
         self._stream = None
+        self._sink = None
         self.active = False
 
     def _on_audio(self, indata, frames, time_info, status):
@@ -221,13 +249,21 @@ class Recorder:
             log(f"audio: {status}")
         self._chunks.append(indata.copy())
 
+        # in streaming mode, push the raw PCM to Deepgram as it arrives
+        if self._sink is not None:
+            try:
+                self._sink(indata.tobytes())
+            except Exception:
+                pass
+
         x = indata.astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(x * x))) + 1e-9
         db = 20.0 * math.log10(rms)
         # -60 dB reads as silence, -5 dB as full scale
         mic_level = max(0.0, min(1.0, (db + 60.0) / 55.0))
 
-    def start(self):
+    def start(self, sink=None):
+        self._sink = sink
         self._chunks = []
         self._stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -242,6 +278,7 @@ class Recorder:
         global mic_level
         self.active = False
         mic_level = 0.0
+        self._sink = None
         if self._stream is not None:
             try:
                 self._stream.stop()
@@ -532,8 +569,35 @@ class Overlay:
 # ----------------------------------------------------------------------------
 
 
+def _format_transcript(text: str) -> str:
+    """Turn Deepgram's dictation newline tokens into real newlines."""
+    return text.replace("<\\n\\n>", "\n\n").replace("<\\n>", "\n")
+
+
+_warned_no_ws = False
+
+
+def resolve_mode() -> str:
+    """The effective transcription mode, falling back to batch if streaming
+    is requested but the websocket-client package is not available."""
+    global _warned_no_ws
+    if TRANSCRIBE_MODE == "streaming":
+        if websocket is None:
+            if not _warned_no_ws:
+                log("websocket-client not installed; using batch mode")
+                _warned_no_ws = True
+            return "batch"
+        return "streaming"
+    return "batch"
+
+
+# -- batch -------------------------------------------------------------------
+
+_http = requests.Session()          # reused across calls to skip TLS handshakes
+
+
 def transcribe(wav_bytes: bytes) -> str:
-    resp = requests.post(
+    resp = _http.post(
         ENDPOINT,
         params=DG_PARAMS,
         headers={"Authorization": f"Token {API_KEY}",
@@ -543,8 +607,109 @@ def transcribe(wav_bytes: bytes) -> str:
     )
     resp.raise_for_status()
     alt = resp.json()["results"]["channels"][0]["alternatives"][0]
-    text = alt.get("transcript", "").strip()
-    return text.replace("<\\n\\n>", "\n\n").replace("<\\n>", "\n")
+    return _format_transcript(alt.get("transcript", "").strip())
+
+
+# -- streaming ---------------------------------------------------------------
+
+
+class StreamingSession:
+    """A live Deepgram WebSocket connection. Audio pushed in via send() is
+    transcribed as it arrives; finish() flushes and returns the full text."""
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.ws = None
+        self._thread = None
+        self._finals = []
+        self._lock = threading.Lock()
+        self._open = threading.Event()
+        self._closed = threading.Event()
+        self._finishing = False         # True once we've asked to close
+        self._pending = []              # audio buffered until the socket opens
+
+    def start(self):
+        url = STREAM_ENDPOINT + "?" + urlencode(STREAM_PARAMS)
+        self.ws = websocket.WebSocketApp(
+            url,
+            header=[f"Authorization: Token {self.api_key}"],
+            on_open=self._on_open,
+            on_message=self._on_message,
+            on_error=self._on_error,
+            on_close=self._on_close,
+        )
+        self._thread = threading.Thread(target=self.ws.run_forever, daemon=True)
+        self._thread.start()
+
+    # -- websocket callbacks ---------------------------------------------
+
+    def _on_open(self, ws):
+        # flush anything captured before the socket finished connecting
+        with self._lock:
+            pending, self._pending = self._pending, []
+        for chunk in pending:
+            self._raw_send(chunk)
+        self._open.set()
+
+    def _on_message(self, ws, message):
+        try:
+            data = json.loads(message)
+        except Exception:
+            return
+        alt = (data.get("channel", {}).get("alternatives") or [{}])[0]
+        text = alt.get("transcript", "").strip()
+        if text and data.get("is_final"):
+            with self._lock:
+                self._finals.append(text)
+
+    def _on_error(self, ws, error):
+        # once we've asked to close, the server's close frame surfaces here as
+        # an "error" - that's expected shutdown noise, not a real failure
+        if not self._finishing:
+            log(f"streaming error: {error}")
+
+    def _on_close(self, ws, *args):
+        self._closed.set()
+
+    # -- audio in --------------------------------------------------------
+
+    def _raw_send(self, pcm: bytes):
+        try:
+            self.ws.send(pcm, opcode=websocket.ABNF.OPCODE_BINARY)
+        except Exception:
+            pass
+
+    def send(self, pcm: bytes):
+        if self._open.is_set():
+            self._raw_send(pcm)
+        else:                           # still connecting - buffer it
+            with self._lock:
+                self._pending.append(pcm)
+
+    # -- finish ----------------------------------------------------------
+
+    def transcript(self) -> str:
+        with self._lock:
+            return _format_transcript(" ".join(self._finals).strip())
+
+    def finish(self, timeout: float = 3.0) -> str:
+        """Tell Deepgram we're done, wait for the last finals, return text."""
+        self._finishing = True
+        try:
+            self.ws.send(json.dumps({"type": "CloseStream"}))
+        except Exception:
+            pass
+        self._closed.wait(timeout=timeout)
+        self.close()
+        return self.transcript()
+
+    def close(self):
+        self._finishing = True
+        try:
+            if self.ws is not None:
+                self.ws.close()
+        except Exception:
+            pass
 
 
 # ----------------------------------------------------------------------------
@@ -582,7 +747,7 @@ def deliver(text: str):
             kbd.release(mod)
         except Exception:
             pass
-    time.sleep(0.12)
+    time.sleep(0.06)
 
     with kbd.pressed(PASTE_MODIFIER):
         kbd.press("v")
@@ -605,6 +770,7 @@ def deliver(text: str):
 
 recorder = Recorder()
 busy = threading.Lock()
+_stream_session = None      # live StreamingSession while recording, else None
 
 MOD_KEYS = {
     "alt": {keyboard.Key.alt, keyboard.Key.alt_l,
@@ -630,15 +796,57 @@ def trigger_id(key):
     return getattr(key, "vk", None) or getattr(key, "char", None)
 
 
+def _transcribe_or_error(wav):
+    """Batch-transcribe wav. Returns the text (possibly ''), or None if a
+    connection/API error was already surfaced to the overlay (in which case
+    the caller should stop)."""
+    if not wav:
+        return ""
+    try:
+        return transcribe(wav)
+    except requests.HTTPError as e:
+        code = e.response.status_code if e.response is not None else "?"
+        body = e.response.text[:200] if e.response is not None else ""
+        log(f"Deepgram {code}: {body}")
+        ui.put(("error", "Key rejected - rerun setup.bat" if code == 401
+                else f"Deepgram error {code}"))
+        beep("error")
+        return None
+    except requests.RequestException as e:
+        log(f"network: {e}")
+        ui.put(("error", "No connection to Deepgram"))
+        beep("error")
+        return None
+    except Exception as e:
+        log(f"{type(e).__name__}: {e}")
+        ui.put(("error", type(e).__name__))
+        beep("error")
+        return None
+
+
 def handle_toggle():
+    global _stream_session
     if not busy.acquire(blocking=False):
         return
     try:
+        # ---- start ----
         if not recorder.active:
+            session = None
+            if resolve_mode() == "streaming":
+                session = StreamingSession(API_KEY)
+                try:
+                    session.start()
+                except Exception as e:
+                    log(f"streaming start failed, using batch: {e}")
+                    session = None
+            _stream_session = session
             try:
-                recorder.start()
+                recorder.start(sink=session.send if session else None)
             except Exception as e:
                 log(f"microphone unavailable: {e}")
+                if session is not None:
+                    session.close()
+                    _stream_session = None
                 ui.put(("error", "Microphone unavailable"))
                 beep("error")
                 return
@@ -646,34 +854,37 @@ def handle_toggle():
             beep("start")
             return
 
+        # ---- stop ----
+        session = _stream_session
+        _stream_session = None
         wav, seconds = recorder.stop()
         beep("stop")
 
-        if wav is None or seconds < MIN_SECONDS:
+        if seconds < MIN_SECONDS:
+            if session is not None:
+                session.close()
             ui.put(("state", "hidden"))
             return
 
         ui.put(("state", "working"))
-        try:
-            text = transcribe(wav)
-        except requests.HTTPError as e:
-            code = e.response.status_code if e.response is not None else "?"
-            body = e.response.text[:200] if e.response is not None else ""
-            log(f"Deepgram {code}: {body}")
-            ui.put(("error", "Key rejected - rerun setup.bat" if code == 401
-                    else f"Deepgram error {code}"))
-            beep("error")
-            return
-        except requests.RequestException as e:
-            log(f"network: {e}")
-            ui.put(("error", "No connection to Deepgram"))
-            beep("error")
-            return
-        except Exception as e:
-            log(f"{type(e).__name__}: {e}")
-            ui.put(("error", type(e).__name__))
-            beep("error")
-            return
+
+        if session is not None:
+            # streaming: gather the finals, fall back to batch if empty
+            # (e.g. the socket never connected)
+            try:
+                text = session.finish()
+            except Exception as e:
+                log(f"streaming finish failed: {e}")
+                text = ""
+            if not text:
+                log("streaming produced no text; trying batch fallback")
+                text = _transcribe_or_error(wav)
+                if text is None:
+                    return
+        else:
+            text = _transcribe_or_error(wav)
+            if text is None:
+                return
 
         if not text:
             ui.put(("error", "No speech detected"))
@@ -681,7 +892,6 @@ def handle_toggle():
 
         log(f"-> {text}")
         ui.put(("state", "hidden"))
-        time.sleep(0.05)
         deliver(text)
         beep("done")
     finally:
@@ -788,6 +998,8 @@ def main():
     listener.stop()
     if recorder.active:
         recorder.stop()
+    if _stream_session is not None:
+        _stream_session.close()
     log("stopped")
 
 

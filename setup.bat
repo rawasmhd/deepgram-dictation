@@ -41,7 +41,7 @@ echo.
 rem ---- 2. packages ------------------------------------------------------
 echo   Installing packages, this takes a minute...
 %PY% -m pip install --quiet --upgrade pip
-%PY% -m pip install --quiet sounddevice numpy requests pynput pyperclip
+%PY% -m pip install --quiet sounddevice numpy requests pynput pyperclip websocket-client
 if errorlevel 1 goto pipfailed
 echo   Packages installed.
 echo.

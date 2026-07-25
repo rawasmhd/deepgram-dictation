@@ -8,7 +8,7 @@ new feature, or a whole new platform.
 ```bash
 git clone https://github.com/rawasmhd/deepgram-dictation
 cd deepgram-dictation
-python -m pip install sounddevice numpy requests pynput pyperclip
+python -m pip install sounddevice numpy requests pynput pyperclip websocket-client
 python dictate.py            # runs with a visible console for debugging
 ```
 
