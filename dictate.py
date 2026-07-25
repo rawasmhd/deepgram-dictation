@@ -78,6 +78,7 @@ if IS_WINDOWS and BEEP:
 
 try:
     import tkinter as tk
+    import tkinter.font as tkfont
 except Exception:
     tk = None
     SHOW_OVERLAY = False
@@ -344,6 +345,7 @@ class Overlay:
     PITCH = 6
     BAR_W = 3
     MAX_BAR = 21
+    WORK_LABEL = "Transcribing"
 
     def __init__(self, root):
         self.root = root
@@ -388,6 +390,14 @@ class Overlay:
                                     fill=BAR_IDLE_HEX, outline="")
             for x1, x2 in self.bar_x
         ]
+
+        # first bar that clears the "Transcribing" label, so the working-state
+        # scan animation never draws on top of the text
+        label_right = 20 + tkfont.Font(family="Segoe UI",
+                                       size=10).measure(self.WORK_LABEL)
+        self.work_start = next(
+            (i for i, (x1, _) in enumerate(self.bar_x) if x1 >= label_right + 14),
+            self.BARS)
 
         self.place()
         self.win.update_idletasks()
@@ -455,10 +465,11 @@ class Overlay:
         elif state == "working":
             self.c.itemconfigure(self.dot, state="hidden")
             self.c.itemconfigure(self.label, state="normal",
-                                 text="Transcribing", fill=TEXT_BRIGHT)
+                                 text=self.WORK_LABEL, fill=TEXT_BRIGHT)
             self.c.itemconfigure(self.timer, state="hidden")
-            for b in self.bars:
-                self.c.itemconfigure(b, state="normal")
+            for i, b in enumerate(self.bars):
+                self.c.itemconfigure(
+                    b, state="normal" if i >= self.work_start else "hidden")
             self.show()
 
         elif state == "error":
@@ -500,9 +511,13 @@ class Overlay:
                                                     (240, 84, 84), p))
 
         elif self.state == "working":
-            head = (self.frame * 1.1) % (self.BARS + 10)
-            for i, (bar, (x1, x2)) in enumerate(zip(self.bars, self.bar_x)):
-                glow = max(0.0, 1.0 - abs(i - head) / 5.0)
+            vis = self.BARS - self.work_start
+            head = (self.frame * 1.1) % (vis + 10)
+            for j in range(vis):
+                i = self.work_start + j
+                bar = self.bars[i]
+                x1, x2 = self.bar_x[i]
+                glow = max(0.0, 1.0 - abs(j - head) / 5.0)
                 h = 1.5 + glow * 7
                 self.c.coords(bar, x1, cy - h, x2, cy + h)
                 self.c.itemconfigure(bar, fill=mix(BAR_IDLE, BAR_HIGH, glow))
