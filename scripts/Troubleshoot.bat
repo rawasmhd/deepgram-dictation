@@ -1,6 +1,8 @@
 @echo off
 title Deepgram Dictation - Troubleshoot
-cd /d "%~dp0"
+rem This script lives in scripts\, so step up to the repo root where
+rem dictate.py lives.
+cd /d "%~dp0.."
 echo Running with the console visible so you can see any errors.
 echo Close this window or press CTRL+C to stop.
 echo.

@@ -95,7 +95,7 @@ goto launch
 
 :nostartup
 echo   Could not register autostart. You can still launch it with
-echo   "Start Dictation.bat".
+echo   "scripts\Start Dictation.bat".
 
 rem ---- 5. start it now --------------------------------------------------
 :launch

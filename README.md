@@ -56,11 +56,11 @@ This is an unsigned script (not a code-signed `.exe`), so Windows may warn you t
 
 Taps shorter than 0.4s are ignored, so a stray press won't send an empty request.
 
-The other batch files:
+The other batch files live in [`scripts/`](scripts):
 
-- **`Start Dictation.bat`** — relaunch after you've quit with Ctrl+Alt+Q
-- **`Stop Dictation.bat`** — stop the background process
-- **`Troubleshoot.bat`** — run with a visible console to see errors
+- **`scripts/Start Dictation.bat`** — relaunch after you've quit with Ctrl+Alt+Q
+- **`scripts/Stop Dictation.bat`** — stop the background process
+- **`scripts/Troubleshoot.bat`** — run with a visible console to see errors
 
 ## How it works
 
@@ -89,7 +89,7 @@ To dictate in another language, change `"language"` in `DG_PARAMS` (see [Deepgra
 
 ## Troubleshooting
 
-**Nothing happens on Alt+M.** Make sure it's running (`Start Dictation.bat`). Run `Troubleshoot.bat` to see errors in a console.
+**Nothing happens on Alt+M.** Make sure it's running (`scripts/Start Dictation.bat`). Run `scripts/Troubleshoot.bat` to see errors in a console.
 
 **"Key rejected".** The API key is wrong or expired — rerun `setup.bat` and paste a fresh one.
 
@@ -101,7 +101,7 @@ To dictate in another language, change `"language"` in `DG_PARAMS` (see [Deepgra
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). **macOS
+Contributions are welcome — see [CONTRIBUTING.md](.github/CONTRIBUTING.md). **macOS
 support is the most-wanted addition**, and there's a concrete roadmap for it
 there if you're on a Mac.
 

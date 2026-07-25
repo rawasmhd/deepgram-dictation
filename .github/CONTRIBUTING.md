@@ -68,4 +68,4 @@ an issue first to coordinate is appreciated.
 
 Open an issue with your OS version, what you expected, what happened, and
 anything from `dictation.log` (next to `dictate.py`). Running
-`Troubleshoot.bat` shows errors in a visible console.
+`scripts/Troubleshoot.bat` shows errors in a visible console.

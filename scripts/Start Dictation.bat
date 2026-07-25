@@ -1,7 +1,9 @@
 @echo off
 rem Launch dictation silently. Normally not needed - setup.bat registers
 rem this to run at login - but useful after CTRL+ALT+Q.
-cd /d "%~dp0"
+rem This script lives in scripts\, so step up to the repo root where
+rem dictate.py (and .env) live.
+cd /d "%~dp0.."
 
 set "PY="
 py -3 --version >nul 2>&1

@@ -10,3 +10,6 @@ __pycache__/
 
 # editor / tooling
 .claude/
+
+# local-only: private program-application draft, not for publication
+APPLICATION_DRAFT.md
