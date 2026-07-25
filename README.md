@@ -1,5 +1,7 @@
 # deepgram-dictation
 
+[![CI](https://github.com/rawasmhd/deepgram-dictation/actions/workflows/ci.yml/badge.svg)](https://github.com/rawasmhd/deepgram-dictation/actions/workflows/ci.yml)
+
 Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+M** again, and the transcribed text is pasted at your cursor — in any app. The only thing on screen is a small level meter that floats above the taskbar while you talk.
 
 Audio goes to [Deepgram](https://deepgram.com) for transcription; nothing is stored.

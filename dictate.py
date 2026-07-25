@@ -551,7 +551,16 @@ def transcribe(wav_bytes: bytes) -> str:
 # Delivery
 # ----------------------------------------------------------------------------
 
-kbd = keyboard.Controller()
+_kbd = None
+
+
+def controller():
+    """Lazily build the keyboard controller, so importing this module has no
+    side effects (keeps it testable and safe to import in CI)."""
+    global _kbd
+    if _kbd is None:
+        _kbd = keyboard.Controller()
+    return _kbd
 
 
 def deliver(text: str):
@@ -566,6 +575,7 @@ def deliver(text: str):
     if not AUTO_PASTE:
         return
 
+    kbd = controller()
     for mod in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
                 keyboard.Key.shift, keyboard.Key.cmd):
         try:

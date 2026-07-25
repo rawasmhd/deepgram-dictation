@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install sounddevice numpy requests pynput pyperclip pytest
+
+      - name: Compile check
+        run: python -m py_compile dictate.py
+
+      - name: Import smoke test
+        run: python -c "import dictate; print('import OK')"
+
+      - name: Run tests
+        run: python -m pytest -q
