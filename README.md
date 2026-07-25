@@ -27,6 +27,20 @@ Double-click **`setup.bat`**. It will:
 
 That's it. Press **Alt+M** anywhere to dictate.
 
+## Windows security prompts
+
+This is an unsigned script (not a code-signed `.exe`), so Windows may warn you the first time you run `setup.bat`. There's nothing malicious here — the full source is right in front of you — but here's how to get past the friction:
+
+- **Cleanest fix: clone instead of downloading the ZIP.** Files pulled by `git clone` aren't tagged with the "Mark of the Web", so no warning appears at all:
+  ```bash
+  git clone https://github.com/rawasmhd/deepgram-dictation
+  ```
+- **If you downloaded the ZIP** and see *"Windows protected your PC"*, click **More info → Run anyway**. Or unblock the files first, from a PowerShell window in the folder:
+  ```bash
+  Get-ChildItem *.bat | Unblock-File
+  ```
+- **Antivirus may flag it.** To detect Alt+M the app installs a global keyboard hook, and it simulates Ctrl+V to paste — behaviour that looks keylogger-like to some scanners. That's inherent to how a background dictation hotkey works; read `dictate.py` if you want to confirm what it does.
+
 ## Usage
 
 1. Put your cursor where you want the text.
