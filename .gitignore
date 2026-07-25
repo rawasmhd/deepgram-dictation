@@ -13,3 +13,6 @@ __pycache__/
 
 # local-only: private program-application draft, not for publication
 APPLICATION_DRAFT.md
+
+# not part of this project — unrelated local directory
+RawBrain/
