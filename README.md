@@ -97,6 +97,12 @@ To dictate in another language, change `"language"` in `DG_PARAMS` (see [Deepgra
 
 **It pastes into the wrong place.** The text is pasted wherever focus is when transcription finishes — click into the target field before pressing Alt+M the second time.
 
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). **macOS
+support is the most-wanted addition**, and there's a concrete roadmap for it
+there if you're on a Mac.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
