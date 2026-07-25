@@ -15,6 +15,7 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription; nothing is sto
 - **Alt+M** to start, **Alt+M** to stop, transcribe, and paste
 - **Ctrl+Alt+Q** to quit
 - Works in any application — the text is pasted wherever your cursor is
+- **Low latency** — streams audio to Deepgram live as you talk, so the text lands almost the moment you stop (switchable to batch mode)
 - Floating microphone meter while recording; a "Transcribing" animation while it works
 - Runs silently in the background, no console window, no taskbar clutter
 - Restores whatever was on your clipboard afterwards
@@ -26,7 +27,7 @@ Requires **Python 3** on your PATH ([python.org](https://www.python.org/download
 
 Double-click **`setup.bat`**. It will:
 
-1. install the Python packages (`sounddevice`, `numpy`, `requests`, `pynput`, `pyperclip`)
+1. install the Python packages (`sounddevice`, `numpy`, `requests`, `pynput`, `pyperclip`, `websocket-client`)
 2. ask for your Deepgram API key and save it to `.env`
 3. register itself to start at login
 4. launch it
@@ -66,7 +67,7 @@ The other batch files live in [`scripts/`](scripts):
 
 A single `dictate.py` runs in the background under `pythonw.exe` (so there's no console window). A global keyboard listener ([pynput](https://pypi.org/project/pynput/)) watches for the hotkey.
 
-On the first Alt+M it opens a 16 kHz mono microphone stream with [sounddevice](https://pypi.org/project/sounddevice/) and buffers the audio. On the second Alt+M it packs the buffer into an in-memory WAV, POSTs it to Deepgram's `/v1/listen`, pulls the transcript out of the response, copies it to the clipboard, and simulates **Ctrl+V** to paste it — then restores your previous clipboard contents.
+On the first Alt+M it opens a 16 kHz mono microphone stream with [sounddevice](https://pypi.org/project/sounddevice/). By default (`TRANSCRIBE_MODE = "streaming"`) the audio is sent to Deepgram **live over a WebSocket as you talk**, so the transcript is almost ready the moment you stop — press Alt+M again and it waits only for the last fragment (~300–500ms) before pasting. In `"batch"` mode it instead buffers the whole clip and uploads it to Deepgram's `/v1/listen` after you stop, which is simpler but slower for longer utterances. Either way it copies the result to the clipboard and simulates **Ctrl+V** to paste, then restores your previous clipboard contents. Streaming falls back to batch automatically if `websocket-client` is missing or the connection fails.
 
 The floating meter is a borderless, click-through Tkinter overlay. On Windows it's given the `WS_EX_TRANSPARENT | WS_EX_NOACTIVATE` styles so it never steals focus or intercepts a click.
 
@@ -76,6 +77,7 @@ The knobs are constants at the top of `dictate.py`:
 
 | Constant | Default | What it does |
 |---|---|---|
+| `TRANSCRIBE_MODE` | `"streaming"` | `streaming` (live, low-latency) or `batch` (upload after you stop) |
 | `HOTKEY_MODIFIERS` / `HOTKEY_CHAR` | `{"alt"}` / `"m"` | The start/stop hotkey |
 | `AUTO_PASTE` | `True` | `False` = copy to clipboard only, don't paste |
 | `RESTORE_CLIPBOARD` | `True` | Put your previous clipboard back after pasting |

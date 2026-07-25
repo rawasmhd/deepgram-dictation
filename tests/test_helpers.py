@@ -4,6 +4,8 @@ These deliberately avoid the audio/GUI/hotkey machinery and only exercise the
 logic that can be verified deterministically.
 """
 
+import json
+
 import dictate
 
 
@@ -79,3 +81,43 @@ def test_read_env_file_ignores_comments_and_blanks(tmp_path, monkeypatch):
 def test_read_env_file_missing_returns_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(dictate, "ENV_FILE", tmp_path / "nope.env")
     assert dictate.read_env_file() == ""
+
+
+# ---- _format_transcript() --------------------------------------------------
+
+def test_format_transcript_converts_newline_tokens():
+    assert dictate._format_transcript("a<\\n\\n>b") == "a\n\nb"
+    assert dictate._format_transcript("a<\\n>b") == "a\nb"
+
+
+def test_format_transcript_passthrough():
+    assert dictate._format_transcript("plain text") == "plain text"
+
+
+# ---- StreamingSession result accumulation ----------------------------------
+
+def _msg(transcript, is_final):
+    return json.dumps({
+        "channel": {"alternatives": [{"transcript": transcript}]},
+        "is_final": is_final,
+    })
+
+
+def test_streaming_accumulates_only_finals():
+    s = dictate.StreamingSession("key")
+    s._on_message(None, _msg("hello", True))
+    s._on_message(None, _msg("world", False))   # interim -> ignored
+    s._on_message(None, _msg("there", True))
+    assert s.transcript() == "hello there"
+
+
+def test_streaming_transcript_empty_by_default():
+    s = dictate.StreamingSession("key")
+    assert s.transcript() == ""
+
+
+def test_streaming_ignores_malformed_messages():
+    s = dictate.StreamingSession("key")
+    s._on_message(None, "not json")
+    s._on_message(None, _msg("ok", True))
+    assert s.transcript() == "ok"
