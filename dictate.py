@@ -57,7 +57,7 @@ QUIT_CHAR = "q"
 TRANSCRIBE_MODE = "streaming"       # "streaming" | "batch"
 
 AUTO_PASTE = True                   # False = copy to clipboard only
-RESTORE_CLIPBOARD = True
+RESTORE_CLIPBOARD = False           # True = put the old clipboard back after pasting
 CLIPBOARD_RESTORE_DELAY = 0.8       # seconds to let the paste land first
 BEEP = False                        # short tones on start / stop / error
 MIN_SECONDS = 0.4                   # ignore accidental taps
