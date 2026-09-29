@@ -18,7 +18,7 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription; nothing is sto
 - **Low latency** — streams audio to Deepgram live as you talk, so the text lands almost the moment you stop (switchable to batch mode)
 - Floating microphone meter while recording; a "Transcribing" animation while it works
 - Runs silently in the background, no console window, no taskbar clutter
-- Restores whatever was on your clipboard afterwards
+- Keeps your dictation on the clipboard, so nothing is lost if no text box was focused
 - Smart formatting and spoken punctuation ("comma", "new paragraph") via Deepgram's `nova-3`
 
 ## Install
@@ -80,7 +80,7 @@ The knobs are constants at the top of `dictate.py`:
 | `TRANSCRIBE_MODE` | `"streaming"` | `streaming` (live, low-latency) or `batch` (upload after you stop) |
 | `HOTKEY_MODIFIERS` / `HOTKEY_CHAR` | `{"alt"}` / `"m"` | The start/stop hotkey |
 | `AUTO_PASTE` | `True` | `False` = copy to clipboard only, don't paste |
-| `RESTORE_CLIPBOARD` | `True` | Put your previous clipboard back after pasting |
+| `RESTORE_CLIPBOARD` | `False` | Put your previous clipboard back after pasting (off by default, so the dictation stays on the clipboard) |
 | `BEEP` | `False` | Short tones on start / stop / done / error |
 | `MIN_SECONDS` | `0.4` | Ignore taps shorter than this |
 | `OVERLAY_POSITION` | `"taskbar"` | `center` \| `top` \| `bottom` \| `taskbar` |
