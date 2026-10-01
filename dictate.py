@@ -4,6 +4,7 @@ Deepgram dictation with a floating microphone meter.
 
   Alt+M        start dictating
   Alt+M        stop, transcribe, paste at the cursor
+  Ctrl+Alt+Z   delete the last dictation
   Ctrl+Alt+Q   quit
 
 Runs silently in the background. The only thing you see is a small
@@ -57,6 +58,12 @@ QUIT_CHAR = "q"
 TRANSCRIBE_MODE = "streaming"       # "streaming" | "batch"
 
 AUTO_PASTE = True                   # False = copy to clipboard only
+# Streaming only: paste each phrase while you are still speaking, instead of
+# all the text when you stop. Text goes only into the window that had focus
+# when you started; if you switch away, pasting pauses until you come back.
+LIVE_PASTE = True
+UNDO_MODIFIERS = {"ctrl", "alt"}    # delete the last dictation (Ctrl+Alt+Z),
+UNDO_CHAR = "z"                     # if you have not typed since
 RESTORE_CLIPBOARD = False           # True = put the old clipboard back after pasting
 CLIPBOARD_RESTORE_DELAY = 0.8       # seconds to let the paste land first
 BEEP = False                        # short tones on start / stop / error
@@ -318,6 +325,7 @@ BAR_LOW = (56, 189, 160)
 BAR_HIGH = (125, 211, 252)
 REC_RED = "#f05454"
 ERR_RED = "#ff6b6b"
+PAUSE_AMBER = "#f5b942"
 
 
 class _POINT(ctypes.Structure):
@@ -390,6 +398,7 @@ class Overlay:
         self.started_at = 0.0
         self.message = ""
         self.frame = 0
+        self.paused = False         # live paste is waiting for focus to return
         self.history = deque([0.0] * self.BARS, maxlen=self.BARS)
 
         self.win = tk.Toplevel(root)
@@ -491,6 +500,7 @@ class Overlay:
 
         if state == "recording":
             self.started_at = time.time()
+            self.paused = False
             self.history = deque([0.0] * self.BARS, maxlen=self.BARS)
             self.c.itemconfigure(self.dot, state="normal")
             self.c.itemconfigure(self.label, state="hidden")
@@ -509,10 +519,11 @@ class Overlay:
                     b, state="normal" if i >= self.work_start else "hidden")
             self.show()
 
-        elif state == "error":
+        elif state in ("error", "notice"):
             self.c.itemconfigure(self.dot, state="hidden")
-            self.c.itemconfigure(self.label, state="normal",
-                                 text=message[:46], fill=ERR_RED)
+            self.c.itemconfigure(
+                self.label, state="normal", text=message[:46],
+                fill=ERR_RED if state == "error" else TEXT_BRIGHT)
             self.c.itemconfigure(self.timer, state="hidden")
             for b in self.bars:
                 self.c.itemconfigure(b, state="hidden")
@@ -521,6 +532,9 @@ class Overlay:
 
         else:
             self.hide()
+
+    def set_paused(self, paused):
+        self.paused = paused
 
     # -- per-frame --------------------------------------------------------
 
@@ -538,14 +552,20 @@ class Overlay:
                           else mix(BAR_LOW, BAR_HIGH, lvl))
                 self.c.itemconfigure(bar, fill=colour)
 
-            elapsed = int(time.time() - self.started_at)
-            self.c.itemconfigure(
-                self.timer, text=f"{elapsed // 60}:{elapsed % 60:02d}")
+            if self.paused:
+                self.c.itemconfigure(self.timer, text="Paused",
+                                     fill=PAUSE_AMBER)
+                self.c.itemconfigure(self.dot, fill=PAUSE_AMBER)
+            else:
+                elapsed = int(time.time() - self.started_at)
+                self.c.itemconfigure(
+                    self.timer, text=f"{elapsed // 60}:{elapsed % 60:02d}",
+                    fill=TEXT_DIM)
 
-            # gentle pulse on the record dot
-            p = 0.5 + 0.5 * math.sin(self.frame / 6.0)
-            self.c.itemconfigure(self.dot, fill=mix((90, 40, 46),
-                                                    (240, 84, 84), p))
+                # gentle pulse on the record dot
+                p = 0.5 + 0.5 * math.sin(self.frame / 6.0)
+                self.c.itemconfigure(self.dot, fill=mix((90, 40, 46),
+                                                        (240, 84, 84), p))
 
         elif self.state == "working":
             vis = self.BARS - self.work_start
@@ -559,7 +579,7 @@ class Overlay:
                 self.c.coords(bar, x1, cy - h, x2, cy + h)
                 self.c.itemconfigure(bar, fill=mix(BAR_IDLE, BAR_HIGH, glow))
 
-        elif self.state == "error":
+        elif self.state in ("error", "notice"):
             if time.time() - self.started_at > 3.0:
                 self.set_state("hidden")
 
@@ -617,8 +637,9 @@ class StreamingSession:
     """A live Deepgram WebSocket connection. Audio pushed in via send() is
     transcribed as it arrives; finish() flushes and returns the full text."""
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, on_final=None):
         self.api_key = api_key
+        self.on_final = on_final        # called after each final phrase
         self.ws = None
         self._thread = None
         self._finals = []
@@ -661,6 +682,8 @@ class StreamingSession:
         if text and data.get("is_final"):
             with self._lock:
                 self._finals.append(text)
+            if self.on_final is not None:
+                self.on_final()
 
     def _on_error(self, ws, error):
         # once we've asked to close, the server's close frame surfaces here as
@@ -728,40 +751,182 @@ def controller():
     return _kbd
 
 
-def deliver(text: str):
-    previous = None
-    if RESTORE_CLIPBOARD:
-        try:
-            previous = pyperclip.paste()
-        except Exception:
-            pass
+def foreground_window():
+    """Handle of the window that has keyboard focus (Windows only; None
+    elsewhere, so focus checks always pass)."""
+    if not IS_WINDOWS:
+        return None
+    try:
+        return ctypes.windll.user32.GetForegroundWindow()
+    except Exception:
+        return None
 
+
+# The keyboard listener also sees the keys we send ourselves. Key presses
+# before this time are ours, so they must not count as the user typing.
+_synthetic_until = 0.0
+
+
+def _send_keys(action):
+    """Run action() with a clean set of modifiers and mark its keys as ours."""
+    global _synthetic_until
+    _synthetic_until = time.time() + 5.0
+    try:
+        kbd = controller()
+        for mod in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
+                    keyboard.Key.shift, keyboard.Key.cmd):
+            try:
+                kbd.release(mod)
+            except Exception:
+                pass
+        time.sleep(0.06)
+        action(kbd)
+    finally:
+        _synthetic_until = time.time() + 0.3
+
+
+def paste(text: str):
+    """Put text on the clipboard and press Ctrl+V."""
     pyperclip.copy(text)
+
+    def press(kbd):
+        with kbd.pressed(PASTE_MODIFIER):
+            kbd.press("v")
+            kbd.release("v")
+    _send_keys(press)
+
+
+def restore_clipboard(previous, text):
+    time.sleep(CLIPBOARD_RESTORE_DELAY)
+    try:
+        # only restore if nothing else grabbed the clipboard meanwhile,
+        # so we never clobber something the user copied after pasting
+        if pyperclip.paste() == text:
+            pyperclip.copy(previous)
+    except Exception:
+        pass
+
+
+def read_clipboard():
+    try:
+        return pyperclip.paste()
+    except Exception:
+        return None
+
+
+def deliver(text: str):
+    previous = read_clipboard() if RESTORE_CLIPBOARD else None
+
     if not AUTO_PASTE:
+        pyperclip.copy(text)
         return
 
-    kbd = controller()
-    for mod in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
-                keyboard.Key.shift, keyboard.Key.cmd):
-        try:
-            kbd.release(mod)
-        except Exception:
-            pass
-    time.sleep(0.06)
-
-    with kbd.pressed(PASTE_MODIFIER):
-        kbd.press("v")
-        kbd.release("v")
+    window = foreground_window()
+    paste(text)
+    remember_delivery(text, window)
 
     if previous is not None:
-        time.sleep(CLIPBOARD_RESTORE_DELAY)
+        restore_clipboard(previous, text)
+
+
+# -- live paste --------------------------------------------------------------
+
+
+class LivePaster:
+    """Pastes a streaming transcript while you speak. Text goes only into the
+    window that had focus at the start; while another window has focus,
+    new text waits and is pasted when you come back."""
+
+    def __init__(self, session):
+        self.session = session
+        self.window = foreground_window()
+        self.pasted = ""                # the part of the transcript sent
+        self.paused = False
+        self._wake = threading.Event()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def poke(self):
+        """A new final phrase arrived."""
+        self._wake.set()
+
+    def _run(self):
+        while not self._stop.is_set():
+            # also wake up regularly, to see if focus came back
+            self._wake.wait(timeout=0.25)
+            self._wake.clear()
+            if not self._stop.is_set():
+                self._step()
+
+    def _step(self):
+        text = self.session.transcript()
+        # the transcript only grows, so what we pasted is always its start
+        if not text.startswith(self.pasted):
+            log("live paste: transcript changed unexpectedly; stopping")
+            self._stop.set()
+            return
+        focused = foreground_window() == self.window
+        if focused == self.paused:
+            self.paused = not focused
+            ui.put(("paused", self.paused))
+        new = text[len(self.pasted):]
+        if new and focused:
+            paste(new)
+            self.pasted = text
+
+    def stop(self):
+        self._stop.set()
+        self._wake.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+
+    def finish(self) -> bool:
+        """Stop, paste what is left, and return True if all the text is in
+        the original window."""
+        self.stop()
         try:
-            # only restore if nothing else grabbed the clipboard meanwhile,
-            # so we never clobber something the user copied after pasting
-            if pyperclip.paste() == text:
-                pyperclip.copy(previous)
-        except Exception:
-            pass
+            self._step()
+        except Exception as e:
+            log(f"live paste: {e}")
+        return self.session.transcript() == self.pasted
+
+
+# -- undo --------------------------------------------------------------------
+
+_last_delivery = None       # (characters pasted, window) or None
+
+
+def remember_delivery(text: str, window):
+    global _last_delivery
+    _last_delivery = (len(text), window) if text else None
+
+
+def forget_delivery():
+    global _last_delivery
+    _last_delivery = None
+
+
+def undo_last():
+    """Delete the last dictation with Backspace. This works only while the
+    cursor is still at the end of it, so any key the user presses after a
+    dictation cancels it (see on_press)."""
+    if _last_delivery is None:
+        return
+    count, window = _last_delivery
+    if foreground_window() != window:
+        log("undo skipped: a different window has focus")
+        return
+    forget_delivery()
+
+    def backspaces(kbd):
+        for _ in range(count):
+            kbd.press(keyboard.Key.backspace)
+            kbd.release(keyboard.Key.backspace)
+    _send_keys(backspaces)
+    log(f"undo: deleted {count} characters")
 
 
 # ----------------------------------------------------------------------------
@@ -771,6 +936,8 @@ def deliver(text: str):
 recorder = Recorder()
 busy = threading.Lock()
 _stream_session = None      # live StreamingSession while recording, else None
+_live_paster = None         # LivePaster while recording with LIVE_PASTE, else None
+_clipboard_before = None    # clipboard at the start, for RESTORE_CLIPBOARD
 
 MOD_KEYS = {
     "alt": {keyboard.Key.alt, keyboard.Key.alt_l,
@@ -824,22 +991,44 @@ def _transcribe_or_error(wav):
         return None
 
 
+def finish_live(paster, text, in_place):
+    """Wrap up a dictation that was pasted while you spoke."""
+    log(f"-> {text}")
+    remember_delivery(paster.pasted, paster.window)
+    pyperclip.copy(text)            # the clipboard gets all of it, not one phrase
+    if not in_place:
+        # stopped in another window: the rest is not pasted, so the full
+        # text stays on the clipboard
+        ui.put(("notice", "Window changed - text copied"))
+        return
+    ui.put(("state", "hidden"))
+    if _clipboard_before is not None:
+        restore_clipboard(_clipboard_before, text)
+
+
 def handle_toggle():
-    global _stream_session
+    global _stream_session, _live_paster, _clipboard_before
     if not busy.acquire(blocking=False):
         return
     try:
         # ---- start ----
         if not recorder.active:
-            session = None
+            forget_delivery()
+            session = paster = None
             if resolve_mode() == "streaming":
                 session = StreamingSession(API_KEY)
+                if LIVE_PASTE and AUTO_PASTE:
+                    paster = LivePaster(session)
+                    session.on_final = paster.poke
                 try:
                     session.start()
                 except Exception as e:
                     log(f"streaming start failed, using batch: {e}")
-                    session = None
+                    session = paster = None
             _stream_session = session
+            _live_paster = paster
+            _clipboard_before = (read_clipboard() if paster and RESTORE_CLIPBOARD
+                                 else None)
             try:
                 recorder.start(sink=session.send if session else None)
             except Exception as e:
@@ -847,9 +1036,12 @@ def handle_toggle():
                 if session is not None:
                     session.close()
                     _stream_session = None
+                _live_paster = None
                 ui.put(("error", "Microphone unavailable"))
                 beep("error")
                 return
+            if paster is not None:
+                paster.start()
             ui.put(("state", "recording"))
             beep("start")
             return
@@ -857,10 +1049,14 @@ def handle_toggle():
         # ---- stop ----
         session = _stream_session
         _stream_session = None
+        paster = _live_paster
+        _live_paster = None
         wav, seconds = recorder.stop()
         beep("stop")
 
         if seconds < MIN_SECONDS:
+            if paster is not None:
+                paster.stop()
             if session is not None:
                 session.close()
             ui.put(("state", "hidden"))
@@ -876,6 +1072,14 @@ def handle_toggle():
             except Exception as e:
                 log(f"streaming finish failed: {e}")
                 text = ""
+            if paster is not None:
+                in_place = paster.finish()
+                if paster.pasted:
+                    # some text is already in the document, so a batch retry
+                    # would paste it twice: keep what streaming produced
+                    finish_live(paster, text or paster.pasted, in_place)
+                    beep("done")
+                    return
             if not text:
                 log("streaming produced no text; trying batch fallback")
                 text = _transcribe_or_error(wav)
@@ -898,6 +1102,15 @@ def handle_toggle():
         busy.release()
 
 
+def handle_undo():
+    if recorder.active or not busy.acquire(blocking=False):
+        return
+    try:
+        undo_last()
+    finally:
+        busy.release()
+
+
 def on_press(key):
     for name, keys in MOD_KEYS.items():
         if key in keys:
@@ -908,11 +1121,20 @@ def on_press(key):
     if kid in fired:            # keyboard auto-repeat while the key is held
         return
 
+    # the user typed or moved the cursor, so Backspace would no longer delete
+    # the right text
+    if time.time() >= _synthetic_until and not (
+            UNDO_MODIFIERS <= held and key_matches(key, UNDO_CHAR)):
+        forget_delivery()
+
     # subset (not exact) match, so a stray/stuck extra modifier does not
     # silently disable the hotkey
     if HOTKEY_MODIFIERS <= held and key_matches(key, HOTKEY_CHAR):
         fired.add(kid)
         threading.Thread(target=handle_toggle, daemon=True).start()
+    elif UNDO_MODIFIERS <= held and key_matches(key, UNDO_CHAR):
+        fired.add(kid)
+        threading.Thread(target=handle_undo, daemon=True).start()
     elif QUIT_MODIFIERS <= held and key_matches(key, QUIT_CHAR):
         fired.add(kid)
         ui.put(("quit", None))
@@ -956,7 +1178,8 @@ def main():
         sys.exit(1)
 
     combo = "+".join(sorted(HOTKEY_MODIFIERS) + [HOTKEY_CHAR]).upper()
-    log(f"hotkey: {combo}   quit: CTRL+ALT+Q")
+    log(f"hotkey: {combo}   undo: CTRL+ALT+Z   quit: CTRL+ALT+Q"
+        f"   live paste: {'on' if LIVE_PASTE else 'off'}")
 
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
@@ -981,8 +1204,10 @@ def main():
                     return
                 elif kind == "state":
                     overlay.set_state(payload)
-                elif kind == "error":
-                    overlay.set_state("error", payload)
+                elif kind in ("error", "notice"):
+                    overlay.set_state(kind, payload)
+                elif kind == "paused":
+                    overlay.set_paused(payload)
         except queue.Empty:
             pass
 
@@ -998,6 +1223,8 @@ def main():
     listener.stop()
     if recorder.active:
         recorder.stop()
+    if _live_paster is not None:
+        _live_paster.stop()
     if _stream_session is not None:
         _stream_session.close()
     log("stopped")
