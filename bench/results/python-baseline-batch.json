@@ -1,0 +1,133 @@
+{
+  "label": "python-baseline-batch",
+  "app": "python",
+  "date": "2026-10-01 16:45",
+  "commit": "7c40ed3",
+  "trials_requested": 10,
+  "idle_seconds": 10.0,
+  "machine": "Windows-11-10.0.26200-SP0, 16 logical CPUs",
+  "install": {
+    "app_mb": 0.039234161376953125,
+    "runtime_mb": 199.61951160430908,
+    "python_mb": 141.8983678817749,
+    "packages_mb": 57.72114372253418
+  },
+  "settings": "TRANSCRIBE_MODE='batch', LIVE_PASTE=False, AUTO_PASTE=True, model=nova-3",
+  "startup_s": {
+    "n": 3,
+    "min": 1.2389449998736382,
+    "median": 1.3993155001662672,
+    "p90": 1.402134499978274,
+    "max": 1.402134499978274
+  },
+  "idle_cpu_percent": 0.6249789194678701,
+  "idle_memory": {
+    "working_set_mb": 59.22265625,
+    "private_mb": 516.56640625,
+    "peak_working_set_mb": 59.2265625
+  },
+  "trials": [
+    {
+      "hotkey_to_meter_ms": 51.819900050759315,
+      "start_to_first_text_ms": 12856.61879973486,
+      "stop_to_all_text_ms": 2425.5838999524713,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 46.29179975017905,
+      "start_to_first_text_ms": 12656.994899734855,
+      "stop_to_all_text_ms": 2226.40149993822,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 36.13370005041361,
+      "start_to_first_text_ms": 12451.740500051528,
+      "stop_to_all_text_ms": 2021.2369002401829,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 47.56430024281144,
+      "start_to_first_text_ms": 12502.656300086528,
+      "stop_to_all_text_ms": 2071.994800120592,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 36.48020001128316,
+      "start_to_first_text_ms": 12607.370899990201,
+      "stop_to_all_text_ms": 2177.0965000614524,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 49.62059995159507,
+      "start_to_first_text_ms": 12583.691000007093,
+      "stop_to_all_text_ms": 2153.5175000317395,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 15.200900379568338,
+      "start_to_first_text_ms": 12571.377000305802,
+      "stop_to_all_text_ms": 2141.219799872488,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 35.65199999138713,
+      "start_to_first_text_ms": 12775.972899980843,
+      "stop_to_all_text_ms": 2345.5802998505533,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 14.212099835276604,
+      "start_to_first_text_ms": 13028.893900103867,
+      "stop_to_all_text_ms": 2598.568200133741,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0
+    },
+    {
+      "hotkey_to_meter_ms": 50.85719982162118,
+      "text": "",
+      "accuracy": 0.0
+    }
+  ],
+  "after_trials_memory": {
+    "working_set_mb": 64.84375,
+    "private_mb": 520.1015625,
+    "peak_working_set_mb": 65.3359375
+  },
+  "hotkey_to_meter_ms": {
+    "n": 10,
+    "min": 14.212099835276604,
+    "median": 41.385999880731106,
+    "p90": 50.85719982162118,
+    "max": 51.819900050759315
+  },
+  "start_to_first_text_ms": {
+    "n": 9,
+    "min": 12451.740500051528,
+    "median": 12607.370899990201,
+    "p90": 12856.61879973486,
+    "max": 13028.893900103867
+  },
+  "stop_to_all_text_ms": {
+    "n": 9,
+    "min": 2021.2369002401829,
+    "median": 2177.0965000614524,
+    "p90": 2425.5838999524713,
+    "max": 2598.568200133741
+  },
+  "accuracy": {
+    "n": 10,
+    "min": 0.0,
+    "median": 1.0,
+    "p90": 1.0,
+    "max": 1.0
+  },
+  "full_text_trials": 9
+}
