@@ -26,7 +26,6 @@ import subprocess
 import sys
 import threading
 import time
-import tkinter as tk
 import wave
 from importlib import metadata
 from pathlib import Path
@@ -36,6 +35,7 @@ ROOT = BENCH_DIR.parent
 SAMPLE_WAV = BENCH_DIR / "sample.wav"
 SAMPLE_TEXT = (BENCH_DIR / "sample.txt").read_text(encoding="utf-8").strip()
 RESULTS_DIR = BENCH_DIR / "results"
+PYTHON_LOG = BENCH_DIR / "bench.log"     # run_python.py sends dictate.py's log here
 
 # mutexes the app versions create, to detect a copy that is already running
 APP_MUTEXES = ["DeepgramDictation_v1", "DeepgramDictation_rs_prototype"]
@@ -188,64 +188,123 @@ class Process:
 # ----------------------------------------------------------------------------
 
 
+LRESULT = ctypes.c_ssize_t
+WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM)
+
+WS_OVERLAPPEDWINDOW, WS_VISIBLE, WS_CHILD, WS_VSCROLL = 0x00CF0000, 0x10000000, 0x40000000, 0x00200000
+WS_EX_TOPMOST = 0x00000008
+ES_MULTILINE, ES_AUTOVSCROLL = 0x0004, 0x0040
+WM_DESTROY, WM_CLOSE, WM_COMMAND, WM_APP = 0x0002, 0x0010, 0x0111, 0x8000
+EN_CHANGE, EM_SETLIMITTEXT = 0x0300, 0x00C5
+COLOR_WINDOW = 5
+
+
+class WNDCLASSW(ctypes.Structure):
+    _fields_ = [("style", wt.UINT), ("lpfnWndProc", WNDPROC),
+                ("cbClsExtra", ctypes.c_int), ("cbWndExtra", ctypes.c_int),
+                ("hInstance", wt.HINSTANCE), ("hIcon", wt.HICON),
+                ("hCursor", wt.HANDLE), ("hbrBackground", wt.HBRUSH),
+                ("lpszMenuName", wt.LPCWSTR), ("lpszClassName", wt.LPCWSTR)]
+
+
+user32.DefWindowProcW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+user32.DefWindowProcW.restype = LRESULT
+user32.CreateWindowExW.argtypes = [wt.DWORD, wt.LPCWSTR, wt.LPCWSTR, wt.DWORD,
+                                   ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                   wt.HWND, wt.HMENU, wt.HINSTANCE, wt.LPVOID]
+user32.CreateWindowExW.restype = wt.HWND
+user32.SendMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+user32.SendMessageW.restype = LRESULT
+user32.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
+kernel32.GetModuleHandleW.restype = wt.HMODULE
+
+
 class Target:
+    """A standard Windows text box (EDIT control). A Tkinter text box
+    dropped some pastes (#18), so the benchmark does not use Tkinter."""
+
     def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Benchmark paste target")
-        self.root.geometry("760x220+120+120")
-        self.root.attributes("-topmost", True)
-        self.text = tk.Text(self.root, font=("Segoe UI", 12), wrap="word")
-        self.text.pack(fill="both", expand=True)
-        self.text.bind("<<Modified>>", self._on_modified)
         self.changes = []           # perf_counter() of each change since clear()
         self.content = ""
         self._calls = queue.Queue()
-        self.root.after(5, self._pump)
+        self._wndproc_ref = WNDPROC(self._wndproc)     # keep it alive
 
-    def _on_modified(self, _event):
-        if self.text.edit_modified():
-            self.changes.append(time.perf_counter())
-            self.content = self.text.get("1.0", "end-1c")
-            self.text.edit_modified(False)
+        instance = kernel32.GetModuleHandleW(None)
+        wc = WNDCLASSW()
+        wc.lpfnWndProc = self._wndproc_ref
+        wc.hInstance = instance
+        wc.hbrBackground = COLOR_WINDOW + 1
+        wc.lpszClassName = "DictationBenchTarget"
+        user32.RegisterClassW(ctypes.byref(wc))
+        self.hwnd = user32.CreateWindowExW(
+            WS_EX_TOPMOST, "DictationBenchTarget", "Benchmark paste target",
+            WS_OVERLAPPEDWINDOW | WS_VISIBLE, 120, 120, 760, 220, None, None, instance, None)
+        self.edit = user32.CreateWindowExW(
+            0, "EDIT", "", WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL,
+            0, 0, 740, 180, self.hwnd, None, instance, None)
+        user32.SendMessageW(self.edit, EM_SETLIMITTEXT, 0, 0)    # no length limit
 
-    def _pump(self):
+    def _text(self):
+        n = user32.GetWindowTextLengthW(self.edit)
+        buf = ctypes.create_unicode_buffer(n + 1)
+        user32.GetWindowTextW(self.edit, buf, n + 1)
+        return buf.value.replace("\r\n", "\n")
+
+    def _wndproc(self, hwnd, msg, wp, lp):
         try:
-            while True:
-                fn, done = self._calls.get_nowait()
-                fn()
-                done.set()
-        except queue.Empty:
-            pass
-        self.root.after(5, self._pump)
+            if msg == WM_COMMAND and (wp >> 16) == EN_CHANGE:
+                self.changes.append(time.perf_counter())
+                self.content = self._text()
+                return 0
+            if msg == WM_APP:
+                while True:
+                    try:
+                        fn, done = self._calls.get_nowait()
+                    except queue.Empty:
+                        break
+                    fn()
+                    done.set()
+                return 0
+            if msg == WM_CLOSE:
+                user32.DestroyWindow(hwnd)
+                return 0
+            if msg == WM_DESTROY:
+                user32.PostQuitMessage(0)
+                return 0
+        except Exception as e:
+            print(f"target window: {e}", file=sys.stderr)
+        return user32.DefWindowProcW(hwnd, msg, wp, lp)
+
+    def run(self):
+        """The message loop. Returns when the window closes."""
+        msg = wt.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
 
     def call(self, fn):
-        """Run fn on the Tk thread and wait for it."""
+        """Run fn on the window's thread and wait for it."""
         done = threading.Event()
         self._calls.put((fn, done))
+        user32.PostMessageW(self.hwnd, WM_APP, 0, 0)
         done.wait(5.0)
 
     def focus(self):
-        hwnd = []
-
         def go():
-            self.root.deiconify()
-            self.root.lift()
-            self.root.focus_force()
-            self.text.focus_set()
-            wid = self.root.winfo_id()
-            hwnd.append(user32.GetParent(wid) or wid)
+            user32.SetForegroundWindow(self.hwnd)
+            user32.SetFocus(self.edit)
         self.call(go)
-        if hwnd:
-            user32.SetForegroundWindow(hwnd[0])
         time.sleep(0.2)
 
     def clear(self):
         def go():
-            self.text.delete("1.0", "end")
-            self.text.edit_modified(False)
+            user32.SetWindowTextW(self.edit, "")
             self.content = ""
             self.changes = []
         self.call(go)
+
+    def close(self):
+        self.call(lambda: user32.DestroyWindow(self.hwnd))
 
 
 # ----------------------------------------------------------------------------
@@ -285,7 +344,7 @@ def wait_until_ready(proc, target):
     raise RuntimeError("the hotkey never worked")
 
 
-def run_trial(pid, target, transcribe, audio_seconds):
+def run_trial(pid, target, transcribe, audio_seconds, log):
     target.clear()
     target.focus()
     result = {}
@@ -312,8 +371,28 @@ def run_trial(pid, target, transcribe, audio_seconds):
             result["start_to_first_text_ms"] = (changes[0] - t0) * 1000
             result["stop_to_all_text_ms"] = max(0.0, changes[-1] - t2) * 1000
         result["text"] = target.content
+        if log is not None:
+            result["app_text"] = log.last_transcript()
     time.sleep(1.0)
     return result
+
+
+class AppLog:
+    """Reads the transcripts that the app writes to its log ("-> text")."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.offset = self.path.stat().st_size if self.path.exists() else 0
+
+    def last_transcript(self):
+        if not self.path.exists():
+            return None
+        with open(self.path, encoding="utf-8", errors="replace") as f:
+            f.seek(self.offset)
+            new = f.read()
+            self.offset = f.tell()
+        lines = [ln[3:].strip() for ln in new.splitlines() if ln.startswith("-> ")]
+        return lines[-1] if lines else None
 
 
 def install_size(args):
@@ -385,12 +464,18 @@ def benchmark(args, target, out):
         out["idle_cpu_percent"] = (cpu1 - cpu0) / (w1 - w0) * 100
         out["idle_memory"] = p.memory()
 
+        log_path = PYTHON_LOG if args.app == "python" else args.log
+        log = AppLog(log_path) if log_path else None
         trials = []
         for i in range(args.trials):
-            r = run_trial(proc.pid, target, not args.no_transcribe, audio_seconds)
+            r = run_trial(proc.pid, target, not args.no_transcribe, audio_seconds, log)
             if "text" in r:
                 r["accuracy"] = difflib.SequenceMatcher(
                     None, words(SAMPLE_TEXT), words(r["text"])).ratio()
+                r["exact_transcript"] = words(r["text"]) == words(SAMPLE_TEXT)
+                if r.get("app_text") is not None:
+                    # the text box has exactly what the app transcribed
+                    r["paste_complete"] = words(r["text"]) == words(r["app_text"])
             trials.append(r)
             print(f"trial {i + 1}/{args.trials}: "
                   + ", ".join(f"{k}={v:.0f}" for k, v in r.items()
@@ -402,7 +487,9 @@ def benchmark(args, target, out):
             for key in ("start_to_first_text_ms", "stop_to_all_text_ms"):
                 out[key] = summarize([t.get(key) for t in trials])
             out["accuracy"] = summarize([t.get("accuracy") for t in trials])
-            out["full_text_trials"] = sum(t.get("accuracy", 0) >= 0.99 for t in trials)
+            out["exact_transcript_trials"] = sum(t.get("exact_transcript", False) for t in trials)
+            if all("paste_complete" in t for t in trials):
+                out["paste_complete_trials"] = sum(t["paste_complete"] for t in trials)
     finally:
         stop(proc)
         if p is not None:
@@ -448,6 +535,9 @@ def to_markdown(out):
         return (f"{s['median']:.0f} ms (min {s['min']:.0f}, p90 {s['p90']:.0f}, "
                 f"max {s['max']:.0f}, n={s['n']})") if s else "n/a"
 
+    def count(key):
+        return f"{out[key]} of {len(out['trials'])}" if key in out else "n/a"
+
     mem = out["idle_memory"]
     size = out["install"]
     rows = [
@@ -462,8 +552,8 @@ def to_markdown(out):
         ("Hotkey to meter", ms(out["hotkey_to_meter_ms"])),
         ("Start to first text", ms(out.get("start_to_first_text_ms"))),
         ("Stop to all text in place", ms(out.get("stop_to_all_text_ms"))),
-        ("Trials with the full text in the text box",
-         f"{out['full_text_trials']} of {len(out['trials'])}" if "full_text_trials" in out else "n/a"),
+        ("Paste complete (text box = the app's transcript)", count("paste_complete_trials")),
+        ("Exact transcript (text box = sample.txt)", count("exact_transcript_trials")),
         ("Transcript accuracy (word match, median)",
          f"{out['accuracy']['median'] * 100:.0f} %" if out.get("accuracy") else "n/a"),
         ("Disk: app files", f"{size['app_mb']:.2f} MB"),
@@ -495,6 +585,7 @@ def main():
                     help="skip the stop-to-paste measurement (for the prototype)")
     ap.add_argument("--label", help="name for the results files")
     ap.add_argument("--settings", help="the app settings, for --app rust")
+    ap.add_argument("--log", help="the app's log file with '-> text' lines, for --app rust")
     ap.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
                     help="override a dictate.py setting, for --app python")
     args = ap.parse_args()
@@ -522,10 +613,10 @@ def main():
         except Exception as e:
             errors.append(e)
         finally:
-            target.call(target.root.quit)
+            target.close()
 
     threading.Thread(target=work, daemon=True).start()
-    target.root.mainloop()
+    target.run()
     if errors:
         sys.exit(f"benchmark failed: {errors[0]}")
 

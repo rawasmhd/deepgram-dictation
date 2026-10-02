@@ -2,7 +2,7 @@
 
 This folder compares versions of the app with the same, repeatable measurements (issue #16).
 
-`bench.py` starts the app as a separate process, presses the hotkeys with `SendInput`, and watches the app's windows and a target text box. The app gets `sample.wav` as its microphone, so every trial hears the same speech.
+`bench.py` starts the app as a separate process, presses the hotkeys with `SendInput`, and watches the app's windows and a target text box. The text box is a standard Windows `EDIT` control. A Tkinter text box dropped some pastes, so the benchmark does not use one (#18). The app gets `sample.wav` as its microphone, so every trial hears the same speech.
 
 ## Metrics
 
@@ -14,7 +14,11 @@ This folder compares versions of the app with the same, repeatable measurements 
 | Hotkey to meter | From Alt+M until the meter window is visible. |
 | Start to first text | From Alt+M until the first text arrives in the text box. Only useful with live paste. |
 | Stop to all text in place | From the second Alt+M until the last change to the text box. 0 ms means that all text was already in place at the stop. **This is the most important metric.** |
-| Transcript accuracy | Word match with `sample.txt`, without punctuation and case. |
+| Paste complete | The text box has exactly the text that the app wrote to its log (`-> text`). If this fails, text was lost during the paste. |
+| Exact transcript | The text box has exactly the words of `sample.txt`. If this fails but "paste complete" passes, Deepgram returned different words. |
+| Transcript accuracy | Word match with `sample.txt` (median). |
+
+Words are compared without punctuation and case.
 | Disk | The app files, plus the runtime that they need (Python and the packages). |
 
 The script presses the second Alt+M 0.5 seconds after the end of `sample.wav`.
@@ -44,6 +48,8 @@ python bench/bench.py --app rust --exe rust/target/release/dictation.exe --setti
 ```
 
 The script sets `DICTATION_FAKE_AUDIO` to the path of `sample.wav`. The Rust app must then read this file instead of the microphone. This is part of issue #8. Until then, use `--no-transcribe`.
+
+For the "paste complete" metric, give the Rust app's log file with `--log PATH`. The log must have one `-> text` line for each dictation, like `dictate.py`.
 
 ## Fair comparison
 

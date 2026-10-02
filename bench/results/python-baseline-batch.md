@@ -1,7 +1,7 @@
 # Benchmark: python-baseline-batch
 
-- Date: 2026-10-01 16:45
-- App: python, commit `7c40ed3`
+- Date: 2026-10-02 22:14
+- App: python, commit `269890c`
 - Machine: Windows-11-10.0.26200-SP0, 16 logical CPUs
 - Trials: 10, idle sample: 10.0 s
 - Settings: TRANSCRIBE_MODE='batch', LIVE_PASTE=False, AUTO_PASTE=True, model=nova-3
@@ -9,15 +9,16 @@
 
 | Metric | Result |
 |---|---|
-| Start time (launch until Alt+M works) | 1.40 s (min 1.24, max 1.40, n=3) |
-| Idle memory (working set) | 59.2 MB |
-| Idle memory (private) | 516.6 MB |
-| Peak memory (working set, after trials) | 65.3 MB |
+| Start time (launch until Alt+M works) | 0.77 s (min 0.77, max 0.92, n=3) |
+| Idle memory (working set) | 58.9 MB |
+| Idle memory (private) | 516.3 MB |
+| Peak memory (working set, after trials) | 65.4 MB |
 | Idle CPU | 0.62 % |
-| Hotkey to meter | 41 ms (min 14, p90 51, max 52, n=10) |
-| Start to first text | 12607 ms (min 12452, p90 12857, max 13029, n=9) |
-| Stop to all text in place | 2177 ms (min 2021, p90 2426, max 2599, n=9) |
-| Trials with the full text in the text box | 9 of 10 |
+| Hotkey to meter | 25 ms (min 9, p90 37, max 38, n=10) |
+| Start to first text | 13681 ms (min 13091, p90 20466, max 20664, n=10) |
+| Stop to all text in place | 3250 ms (min 2661, p90 10036, max 10234, n=10) |
+| Paste complete (text box = the app's transcript) | 10 of 10 |
+| Exact transcript (text box = sample.txt) | 10 of 10 |
 | Transcript accuracy (word match, median) | 100 % |
 | Disk: app files | 0.04 MB |
 | Disk: runtime (Python and packages) | 199.6 MB |
