@@ -1,5 +1,5 @@
 //! The floating meter. A layered window with per-pixel alpha, so the
-//! rounded corners are smooth.
+//! rounded ends and the shadow are smooth.
 //! It never takes focus and never intercepts a click.
 
 use std::{collections::VecDeque, mem, ptr, time::Instant};
@@ -10,33 +10,42 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-// Layout in logical pixels (96 dpi).
+use crate::gfx::{self, byte, mix, Rgb};
+
+// Layout in logical pixels (96 dpi). The window is larger than the panel
+// by SHADOW on each side, for the drop shadow.
 const W: f32 = 336.0;
-const H: f32 = 68.0;
-const RADIUS: f32 = 16.0;
-const BARS: usize = 38;
-const PITCH: f32 = 6.0;
+const H: f32 = 52.0;
+const RADIUS: f32 = H / 2.0;
+const SHADOW: f32 = 16.0;
+const SHADOW_DROP: f32 = 4.0; // the shadow sits this much lower
+const SHADOW_BLUR: f32 = 11.0;
+const SHADOW_ALPHA: f32 = 0.30;
+const BARS: usize = 40;
+const PITCH: f32 = 5.0;
 const BAR_W: f32 = 3.0;
-const MAX_BAR: f32 = 21.0;
-const BARS_X0: f32 = 42.0;
-const MARGIN: f32 = 12.0; // gap above the taskbar
-const FONT_PT: f32 = 10.0;
+const MAX_BAR: f32 = 15.0;
+const BARS_X0: f32 = 40.0;
+const PAD: f32 = 18.0;
+const ICON_X: f32 = 26.0; // centre of the dot or icon on the left
+const TEXT_X: f32 = 40.0; // a message after the icon
+const MARGIN: f32 = 12.0 - SHADOW; // the panel's gap above the taskbar
+const FONT_PX: f32 = 13.0;
 const WORK_LABEL: &str = "Transcribing";
 
 pub const TIMER_FRAME: usize = 1;
 const FRAME_MS: u32 = 33; // ~30 fps
 
-type Rgb = [f32; 3];
 const PANEL_BG: Rgb = [23.0, 24.0, 29.0];
-const PANEL_EDGE: Rgb = [49.0, 51.0, 60.0];
-const TEXT_DIM: Rgb = [139.0, 143.0, 156.0];
+const PANEL_EDGE: Rgb = [40.0, 42.0, 49.0];
 const TEXT_BRIGHT: Rgb = [231.0, 233.0, 238.0];
 const BAR_IDLE: Rgb = [58.0, 61.0, 71.0];
 const BAR_LOW: Rgb = [56.0, 189.0, 160.0];
 const BAR_HIGH: Rgb = [125.0, 211.0, 252.0];
-const DOT_DIM: Rgb = [90.0, 40.0, 46.0];
 const REC_RED: Rgb = [240.0, 84.0, 84.0];
 const ERR_RED: Rgb = [255.0, 107.0, 107.0];
+const ERR_TEXT: Rgb = [255.0, 138.0, 138.0];
+const OK_TEAL: Rgb = [56.0, 189.0, 160.0];
 const PAUSE_AMBER: Rgb = [245.0, 185.0, 66.0];
 
 pub enum State {
@@ -66,10 +75,11 @@ struct Gfx {
     bmp: HBITMAP,
     old_bmp: HGDIOBJ,
     font: HFONT,
+    bold: HFONT,
     old_font: HGDIOBJ,
     bits: *mut u32,
-    base_rgb: Vec<Rgb>,  // the empty panel
-    base_alpha: Vec<f32>, // panel coverage, 0 outside the rounded rect
+    base_rgb: Vec<Rgb>,   // the empty panel and its shadow
+    base_alpha: Vec<f32>, // their coverage, 0 outside
     canvas: Vec<Rgb>,
     work_start: usize, // first bar to the right of the "Transcribing" label
 }
@@ -129,6 +139,10 @@ impl Overlay {
 
     pub fn is_working(&self) -> bool {
         matches!(self.state, State::Working)
+    }
+
+    pub fn state(&self) -> &State {
+        &self.state
     }
 
     pub fn set_state(&mut self, state: State) {
@@ -214,28 +228,38 @@ impl Overlay {
 
     fn render(&mut self) {
         let Some(g) = self.gfx.as_mut() else { return };
-        let s = g.scale;
         let cy = H / 2.0;
         g.canvas.copy_from_slice(&g.base_rgb);
 
-        let mut texts: Vec<(String, f32, bool, Rgb)> = Vec::new(); // text, x, right-aligned, colour
+        let mut texts: Vec<(String, f32, bool, bool, Rgb)> = Vec::new(); // text, x, right-aligned, bold, colour
 
         match &self.state {
             State::Hidden => return,
             State::Recording => {
                 for (i, &lvl) in self.history.iter().enumerate() {
-                    let h = (lvl * MAX_BAR).max(1.5);
+                    let h = (lvl * MAX_BAR).max(BAR_W / 2.0);
                     let colour = if lvl < 0.02 { BAR_IDLE } else { mix(BAR_LOW, BAR_HIGH, lvl) };
                     g.bar(i, h, colour);
                 }
                 if self.paused {
-                    g.circle(25.0 * s, cy * s, 5.0 * s, PAUSE_AMBER);
-                    texts.push(("Paused".to_string(), W - 18.0, true, PAUSE_AMBER));
+                    let w = 2.4;
+                    g.shape(
+                        [ICON_X - 9.0, cy - 9.0, ICON_X + 9.0, cy + 9.0], 
+                        |x, y| {
+                            gfx::line(x, y, ICON_X - 3.0, cy - 4.0, ICON_X - 3.0, cy + 4.0, w)
+                                .min(gfx::line(x, y, ICON_X + 3.0, cy - 4.0, ICON_X + 3.0, cy + 4.0, w))
+                        },
+                        PAUSE_AMBER,
+                        1.0,
+                    );
+                    texts.push(("Paused".to_string(), W - PAD, true, true, PAUSE_AMBER));
                 } else {
+                    // a solid dot with a slowly pulsing halo
                     let p = 0.5 + 0.5 * (self.frame as f32 / 6.0).sin();
-                    g.circle(25.0 * s, cy * s, 5.0 * s, mix(DOT_DIM, REC_RED, p));
+                    g.shape([ICON_X - 9.0, cy - 9.0, ICON_X + 9.0, cy + 9.0], |x, y| gfx::circle(x, y, ICON_X, cy, 8.0), REC_RED, 0.10 + 0.18 * p);
+                    g.shape([ICON_X - 9.0, cy - 9.0, ICON_X + 9.0, cy + 9.0], |x, y| gfx::circle(x, y, ICON_X, cy, 4.0), REC_RED, 1.0);
                     let secs = self.started.elapsed().as_secs();
-                    texts.push((format!("{}:{:02}", secs / 60, secs % 60), W - 18.0, true, TEXT_DIM));
+                    texts.push((format!("{}:{:02}", secs / 60, secs % 60), W - PAD, true, true, TEXT_BRIGHT));
                 }
             }
             State::Working => {
@@ -243,19 +267,44 @@ impl Overlay {
                 let head = (self.frame as f32 * 1.1) % (vis as f32 + 10.0);
                 for j in 0..vis {
                     let glow = (1.0 - (j as f32 - head).abs() / 5.0).max(0.0);
-                    g.bar(g.work_start + j, 1.5 + glow * 7.0, mix(BAR_IDLE, BAR_HIGH, glow));
+                    g.bar(g.work_start + j, BAR_W / 2.0 + glow * 7.0, mix(BAR_IDLE, BAR_HIGH, glow));
                 }
-                texts.push((WORK_LABEL.to_string(), 20.0, false, TEXT_BRIGHT));
+                texts.push((WORK_LABEL.to_string(), PAD, false, true, TEXT_BRIGHT));
             }
             State::Notice { text, error } => {
-                let text: String = text.chars().take(46).collect();
-                texts.push((text, 20.0, false, if *error { ERR_RED } else { TEXT_BRIGHT }));
+                let w = 1.6;
+                let ring = |x: f32, y: f32| gfx::outline(gfx::circle(x, y, ICON_X, cy, 6.5), w);
+                if *error {
+                    g.shape(
+                        [ICON_X - 9.0, cy - 9.0, ICON_X + 9.0, cy + 9.0], 
+                        |x, y| {
+                            ring(x, y)
+                                .min(gfx::line(x, y, ICON_X, cy - 3.2, ICON_X, cy + 0.6, w))
+                                .min(gfx::circle(x, y, ICON_X, cy + 3.3, 1.0))
+                        },
+                        ERR_RED,
+                        1.0,
+                    );
+                } else {
+                    g.shape(
+                        [ICON_X - 9.0, cy - 9.0, ICON_X + 9.0, cy + 9.0], 
+                        |x, y| {
+                            ring(x, y)
+                                .min(gfx::line(x, y, ICON_X - 2.8, cy + 0.2, ICON_X - 0.8, cy + 2.2, w))
+                                .min(gfx::line(x, y, ICON_X - 0.8, cy + 2.2, ICON_X + 2.8, cy - 1.8, w))
+                        },
+                        OK_TEAL,
+                        1.0,
+                    );
+                }
+                let text = g.fit(text, W - PAD - TEXT_X);
+                texts.push((text, TEXT_X, false, false, if *error { ERR_TEXT } else { TEXT_BRIGHT }));
             }
         }
 
         g.flush_canvas();
-        for (text, x, right, colour) in &texts {
-            g.text(text, *x, *right, *colour);
+        for (text, x, right, bold, colour) in &texts {
+            g.text(text, *x, *right, *bold, *colour);
         }
         g.finish_alpha();
 
@@ -285,8 +334,8 @@ impl Overlay {
 
 impl Gfx {
     fn new(scale: f32) -> Self {
-        let w = (W * scale).round() as i32;
-        let h = (H * scale).round() as i32;
+        let w = ((W + 2.0 * SHADOW) * scale).round() as i32;
+        let h = ((H + 2.0 * SHADOW) * scale).round() as i32;
         let n = (w * h) as usize;
         unsafe {
             let screen = GetDC(ptr::null_mut());
@@ -305,22 +354,25 @@ impl Gfx {
             let old_bmp = SelectObject(dc, bmp);
 
             let face = wide("Segoe UI");
-            let font = CreateFontW(
-                -(FONT_PT * 96.0 * scale / 72.0).round() as i32,
-                0,
-                0,
-                0,
-                FW_NORMAL as _,
-                0,
-                0,
-                0,
-                DEFAULT_CHARSET as _,
-                OUT_DEFAULT_PRECIS as _,
-                CLIP_DEFAULT_PRECIS as _,
-                CLEARTYPE_QUALITY as _,
-                0,
-                face.as_ptr(),
-            );
+            let font = |weight: u32| {
+                CreateFontW(
+                    -(FONT_PX * scale).round() as i32,
+                    0,
+                    0,
+                    0,
+                    weight as _,
+                    0,
+                    0,
+                    0,
+                    DEFAULT_CHARSET as _,
+                    OUT_DEFAULT_PRECIS as _,
+                    CLIP_DEFAULT_PRECIS as _,
+                    CLEARTYPE_QUALITY as _,
+                    0,
+                    face.as_ptr(),
+                )
+            };
+            let (font, bold) = (font(FW_NORMAL), font(FW_SEMIBOLD));
             let old_font = SelectObject(dc, font);
             SetBkMode(dc, TRANSPARENT as _);
 
@@ -332,6 +384,7 @@ impl Gfx {
                 bmp,
                 old_bmp,
                 font,
+                bold,
                 old_font,
                 bits: bits as *mut u32,
                 base_rgb: vec![[0.0; 3]; n],
@@ -341,7 +394,7 @@ impl Gfx {
             };
             g.build_panel();
 
-            let label_right = 20.0 + g.measure(WORK_LABEL).cx as f32 / scale;
+            let label_right = PAD + g.measure(WORK_LABEL, true).cx as f32 / scale;
             g.work_start = (0..BARS)
                 .find(|&i| BARS_X0 + i as f32 * PITCH >= label_right + 14.0)
                 .unwrap_or(BARS);
@@ -349,62 +402,70 @@ impl Gfx {
         }
     }
 
-    /// The empty rounded panel with a 1px edge, antialiased.
+    /// Logical panel coordinates to window pixels.
+    fn px(&self, v: f32) -> f32 {
+        (v + SHADOW) * self.scale
+    }
+
+    /// The empty rounded panel with a 1px edge and a soft shadow below,
+    /// antialiased. The colours are straight (not premultiplied).
     fn build_panel(&mut self) {
         let s = self.scale;
-        let (cx, cy) = (self.w as f32 / 2.0, self.h as f32 / 2.0);
-        let (hw, hh) = (cx - 0.5 * s, cy - 0.5 * s);
+        let (x0, y0, x1, y1) = (self.px(0.0), self.px(0.0), self.px(W), self.px(H));
         let r = RADIUS * s;
         let edge = s.max(1.0);
+        let drop = SHADOW_DROP * s;
+        let blur = SHADOW_BLUR * s;
         for y in 0..self.h {
             for x in 0..self.w {
-                let d = round_rect_distance(x as f32 + 0.5 - cx, y as f32 + 0.5 - cy, hw, hh, r);
-                let i = (y * self.w + x) as usize;
-                self.base_alpha[i] = (0.5 - d).clamp(0.0, 1.0);
+                let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+                let d = gfx::round_rect(fx, fy, x0, y0, x1, y1, r);
+                let panel = (0.5 - d).clamp(0.0, 1.0);
                 let inner = (0.5 - (d + edge)).clamp(0.0, 1.0);
-                self.base_rgb[i] = mix(PANEL_EDGE, PANEL_BG, inner);
+
+                let ds = gfx::round_rect(fx, fy, x0, y0 + drop, x1, y1 + drop, r);
+                let t = (ds / blur).clamp(0.0, 1.0);
+                let shadow = SHADOW_ALPHA * (1.0 - t * t * (3.0 - 2.0 * t));
+
+                let alpha = panel + shadow * (1.0 - panel);
+                let i = (y * self.w + x) as usize;
+                self.base_alpha[i] = alpha;
+                // the shadow is black, so it only darkens the edge pixels
+                let colour = mix(PANEL_EDGE, PANEL_BG, inner);
+                let k = if alpha > 0.0 { panel / alpha } else { 0.0 };
+                self.base_rgb[i] = [colour[0] * k, colour[1] * k, colour[2] * k];
             }
         }
     }
 
-    /// Bar `i`, `half` logical pixels above and below the centre line.
+    /// Bar `i`, `half` logical pixels above and below the centre line,
+    /// with round ends.
     fn bar(&mut self, i: usize, half: f32, colour: Rgb) {
+        let x = BARS_X0 + i as f32 * PITCH + BAR_W / 2.0;
+        let r = BAR_W / 2.0;
+        let cy = H / 2.0;
+        let (top, bottom) = (cy - (half - r).max(0.0), cy + (half - r).max(0.0));
+        self.shape([x - r, top - r, x + r, bottom + r], |px, py| gfx::line(px, py, x, top, x, bottom, BAR_W), colour, 1.0);
+    }
+
+    /// Paint a shape, given as a distance function in logical panel
+    /// coordinates. `bbox` (x0, y0, x1, y1) limits the work.
+    fn shape(&mut self, bbox: [f32; 4], d: impl Fn(f32, f32) -> f32, colour: Rgb, alpha: f32) {
         let s = self.scale;
-        let x1 = (BARS_X0 + i as f32 * PITCH) * s;
-        let cy = H / 2.0 * s;
-        self.rect(x1, cy - half * s, x1 + BAR_W * s, cy + half * s, colour);
-    }
-
-    fn rect(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, colour: Rgb) {
-        let (px0, px1) = (x0.floor().max(0.0) as i32, (x1.ceil() as i32).min(self.w));
-        let (py0, py1) = (y0.floor().max(0.0) as i32, (y1.ceil() as i32).min(self.h));
-        for py in py0..py1 {
-            let cov_y = overlap(py as f32, y0, y1);
-            for px in px0..px1 {
-                let a = cov_y * overlap(px as f32, x0, x1);
-                self.blend(px, py, colour, a);
+        let [x0, y0, x1, y1] = bbox.map(|v| self.px(v));
+        let (px0, px1) = ((x0 - 1.0).max(0.0) as i32, ((x1 + 1.0) as i32).min(self.w));
+        let (py0, py1) = ((y0 - 1.0).max(0.0) as i32, ((y1 + 1.0) as i32).min(self.h));
+        for y in py0..py1 {
+            let ly = (y as f32 + 0.5) / s - SHADOW;
+            for x in px0..px1 {
+                let lx = (x as f32 + 0.5) / s - SHADOW;
+                let a = (0.5 - d(lx, ly) * s).clamp(0.0, 1.0) * alpha;
+                if a > 0.0 {
+                    let i = (y * self.w + x) as usize;
+                    self.canvas[i] = mix(self.canvas[i], colour, a);
+                }
             }
         }
-    }
-
-    fn circle(&mut self, cx: f32, cy: f32, r: f32, colour: Rgb) {
-        let (px0, px1) = ((cx - r - 1.0).max(0.0) as i32, ((cx + r + 1.0) as i32).min(self.w));
-        let (py0, py1) = ((cy - r - 1.0).max(0.0) as i32, ((cy + r + 1.0) as i32).min(self.h));
-        for py in py0..py1 {
-            for px in px0..px1 {
-                let (dx, dy) = (px as f32 + 0.5 - cx, py as f32 + 0.5 - cy);
-                let a = (0.5 - ((dx * dx + dy * dy).sqrt() - r)).clamp(0.0, 1.0);
-                self.blend(px, py, colour, a);
-            }
-        }
-    }
-
-    fn blend(&mut self, x: i32, y: i32, colour: Rgb, a: f32) {
-        if a <= 0.0 {
-            return;
-        }
-        let i = (y * self.w + x) as usize;
-        self.canvas[i] = mix(self.canvas[i], colour, a);
     }
 
     /// Copy the canvas into the bitmap, opaque, so GDI can draw text on it.
@@ -417,13 +478,13 @@ impl Gfx {
 
     /// Text at logical `x`, vertically centred. GDI writes the colour
     /// channels only; `finish_alpha` adds the alpha afterwards.
-    fn text(&self, text: &str, x: f32, right_aligned: bool, colour: Rgb) {
-        let size = self.measure(text);
-        let mut left = (x * self.scale).round() as i32;
+    fn text(&self, text: &str, x: f32, right_aligned: bool, bold: bool, colour: Rgb) {
+        let size = self.measure(text, bold);
+        let mut left = self.px(x).round() as i32;
         if right_aligned {
             left -= size.cx;
         }
-        let top = (self.h - size.cy) / 2;
+        let top = self.px(H / 2.0).round() as i32 - size.cy / 2;
         let t = wide_no_nul(text);
         unsafe {
             SetTextColor(self.dc, byte(colour[2]) << 16 | byte(colour[1]) << 8 | byte(colour[0]));
@@ -431,13 +492,31 @@ impl Gfx {
         }
     }
 
-    fn measure(&self, text: &str) -> SIZE {
+    /// Selects the font, and measures `text` in it.
+    fn measure(&self, text: &str, bold: bool) -> SIZE {
         let t = wide_no_nul(text);
         let mut size = SIZE { cx: 0, cy: 0 };
         unsafe {
+            SelectObject(self.dc, if bold { self.bold } else { self.font });
             GetTextExtentPoint32W(self.dc, t.as_ptr(), t.len() as i32, &mut size);
         }
         size
+    }
+
+    /// `text`, shortened with "…" to fit in `width` logical pixels.
+    fn fit(&self, text: &str, width: f32) -> String {
+        let max = (width * self.scale) as i32;
+        if self.measure(text, false).cx <= max {
+            return text.to_string();
+        }
+        let mut chars: Vec<char> = text.chars().collect();
+        while chars.pop().is_some() {
+            let t = chars.iter().collect::<String>().trim_end().to_string() + "…";
+            if self.measure(&t, false).cx <= max {
+                return t;
+            }
+        }
+        String::new()
     }
 
     /// Apply the panel shape as premultiplied alpha.
@@ -457,31 +536,11 @@ impl Drop for Gfx {
             SelectObject(self.dc, self.old_font);
             SelectObject(self.dc, self.old_bmp);
             DeleteObject(self.font);
+            DeleteObject(self.bold);
             DeleteObject(self.bmp);
             DeleteDC(self.dc);
         }
     }
-}
-
-fn round_rect_distance(x: f32, y: f32, hw: f32, hh: f32, r: f32) -> f32 {
-    let qx = x.abs() - (hw - r);
-    let qy = y.abs() - (hh - r);
-    let (ox, oy) = (qx.max(0.0), qy.max(0.0));
-    (ox * ox + oy * oy).sqrt() + qx.max(qy).min(0.0) - r
-}
-
-/// How much of pixel [p, p+1] lies inside [a, b].
-fn overlap(p: f32, a: f32, b: f32) -> f32 {
-    ((p + 1.0).min(b) - p.max(a)).clamp(0.0, 1.0)
-}
-
-fn mix(a: Rgb, b: Rgb, t: f32) -> Rgb {
-    let t = t.clamp(0.0, 1.0);
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
-}
-
-fn byte(v: f32) -> u32 {
-    (v + 0.5).clamp(0.0, 255.0) as u32
 }
 
 pub fn wide(s: &str) -> Vec<u16> {

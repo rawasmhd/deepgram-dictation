@@ -6,29 +6,39 @@
 //!   Ctrl+Alt+Q   quit
 //!
 //! The first start, or `dictation.exe --setup`, asks for the API key.
+//! The tray icon shows the state and has a menu: settings, autostart, the
+//! log, quit.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod art;
 mod audio;
 mod config;
 mod deepgram;
+mod gfx;
 mod live;
 mod logging;
 mod overlay;
 mod paste;
 mod setup;
+mod theme;
+mod tray;
 mod typing;
 
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::{cell::RefCell, ptr, thread};
 
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::System::Threading::CreateMutexW;
 use windows_sys::Win32::UI::HiDpi::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+use windows_sys::Win32::UI::Shell::ShellExecuteW;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
+use art::Dot;
 use live::LivePaste;
 use overlay::{wide, Overlay, State, TIMER_FRAME};
+use tray::{Tray, WM_TRAY};
 
 const HOTKEY_TOGGLE: i32 = 1;
 const HOTKEY_QUIT: i32 = 2;
@@ -49,6 +59,11 @@ const MIN_SECONDS: f32 = 0.4; // ignore accidental taps
 /// this one never run at the same time.
 const INSTANCE_MUTEX: &str = "DeepgramDictation_v1";
 
+/// Explorer's "TaskbarCreated" message, to add the tray icon again.
+static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(u32::MAX);
+/// The settings window is open (from the tray menu).
+static SETTINGS_OPEN: AtomicBool = AtomicBool::new(false);
+
 type Transcript = Result<String, deepgram::Error>;
 
 /// The last dictation, for undo: how many characters, and where.
@@ -68,6 +83,7 @@ struct App {
     last: Option<Delivery>,
     clipboard_later: Option<String>,
     frames: u32,
+    tray: Tray,
 }
 
 thread_local! {
@@ -83,7 +99,7 @@ fn main() {
     let mut key = config::api_key();
     let mut did_setup = false;
     if asked || key.is_none() {
-        match setup::run(key.is_none() || config::autostart_enabled()) {
+        match setup::run(key.as_deref(), key.is_none() || config::autostart_enabled(), key.is_none()) {
             Some(choice) => {
                 if let Err(e) = apply_setup(&choice) {
                     alert(&format!("The setup could not be saved.\n\n{e}"));
@@ -140,8 +156,12 @@ fn main() {
         if config::streaming() { "streaming" } else { "batch" },
         if config::streaming() && config::live_paste() { "on" } else { "off" },
     ));
+    theme::allow_dark_menus();
+    tray::track_foreground();
+    TASKBAR_CREATED.store(tray::taskbar_created_message(), Ordering::Relaxed);
+    let tray = Tray::add(hwnd);
     if did_setup {
-        info("Ready.\n\nPress Alt+M anywhere to dictate, and Alt+M again to paste the text.\nQuit with Ctrl+Alt+Q.");
+        tray.balloon("Ready", "Press Alt+M anywhere to dictate, and Alt+M again to paste the text.");
     }
 
     APP.with(|a| {
@@ -156,6 +176,7 @@ fn main() {
             last: None,
             clipboard_later: None,
             frames: 0,
+            tray,
         })
     });
 
@@ -166,6 +187,8 @@ fn main() {
             DispatchMessageW(&msg);
         }
     }
+    // removes the tray icon
+    APP.with(|a| a.borrow_mut().take());
     log("stopped");
 }
 
@@ -189,6 +212,22 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             with_app(|app| app.on_transcript(result));
             0
         }
+        WM_TRAY => {
+            let event = (lp & 0xFFFF) as u32;
+            if event == WM_LBUTTONUP || event == WM_RBUTTONUP {
+                on_tray_menu(hwnd);
+            }
+            0
+        }
+        WM_SETTINGCHANGE => {
+            // light or dark mode may have changed
+            with_app(|app| app.tray.theme_changed());
+            DefWindowProcW(hwnd, msg, wp, lp)
+        }
+        m if m == TASKBAR_CREATED.load(Ordering::Relaxed) => {
+            with_app(|app| app.tray.add_again());
+            0
+        }
         _ => DefWindowProcW(hwnd, msg, wp, lp),
     }
 }
@@ -199,9 +238,58 @@ fn with_app(f: impl FnOnce(&mut App)) {
         if let Ok(mut guard) = a.try_borrow_mut() {
             if let Some(app) = guard.as_mut() {
                 f(app);
+                app.sync_tray();
             }
         }
     });
+}
+
+/// The tray menu. It runs its own message loop, so the app is not
+/// borrowed while it is open.
+fn on_tray_menu(hwnd: HWND) {
+    let mut state = None;
+    with_app(|app| state = Some((app.recording.is_some(), app.overlay.is_working(), app.status().1)));
+    let Some((recording, busy, status)) = state else { return };
+    let menu = tray::MenuState { status: &status, recording, busy, autostart: config::autostart_enabled() };
+    match tray::menu(hwnd, &menu) {
+        Some(tray::CMD_TOGGLE) => {
+            // back to the window the user worked in, so the text goes there
+            tray::restore_focus();
+            with_app(|app| app.on_hotkey(HOTKEY_TOGGLE));
+        }
+        Some(tray::CMD_SETTINGS) => open_settings(),
+        Some(tray::CMD_AUTOSTART) => {
+            let on = !config::autostart_enabled();
+            match config::set_autostart(on) {
+                Ok(_) => log(&format!("tray: autostart {}", if on { "on" } else { "off" })),
+                Err(e) => alert(&format!("Could not change the autostart.\n\n{e}")),
+            }
+        }
+        Some(tray::CMD_LOG) => {
+            if let Some(path) = logging::path() {
+                let path = wide(&path.display().to_string());
+                unsafe { ShellExecuteW(hwnd, wide("open").as_ptr(), path.as_ptr(), ptr::null(), ptr::null(), SW_SHOWNORMAL) };
+            }
+        }
+        Some(tray::CMD_QUIT) => with_app(|app| app.on_hotkey(HOTKEY_QUIT)),
+        _ => {}
+    }
+}
+
+/// The setup window, from the tray menu. A new key is used at once.
+fn open_settings() {
+    if SETTINGS_OPEN.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let mut key = String::new();
+    with_app(|app| key = app.key.clone());
+    if let Some(choice) = setup::run(Some(&key), config::autostart_enabled(), false) {
+        match apply_setup(&choice) {
+            Ok(()) => with_app(|app| app.key = choice.key),
+            Err(e) => alert(&format!("The settings could not be saved.\n\n{e}")),
+        }
+    }
+    SETTINGS_OPEN.store(false, Ordering::Relaxed);
 }
 
 fn foreground() -> HWND {
@@ -209,6 +297,22 @@ fn foreground() -> HWND {
 }
 
 impl App {
+    /// The tray icon's dot, and a line for the tooltip and the menu.
+    fn status(&self) -> (Dot, String) {
+        match self.overlay.state() {
+            _ if self.recording.is_some() => (Dot::Recording, "Recording… (Alt+M to stop)".into()),
+            State::Working => (Dot::Working, "Transcribing…".into()),
+            State::Notice { text, error: true } => (Dot::Problem, text.clone()),
+            _ => (Dot::None, "Ready. Press Alt+M to dictate.".into()),
+        }
+    }
+
+    fn sync_tray(&mut self) {
+        let (dot, line) = self.status();
+        let tip = if dot == Dot::None { tray::TIP_READY.to_string() } else { line };
+        self.tray.set(dot, &tip);
+    }
+
     fn on_hotkey(&mut self, id: i32) {
         match id {
             HOTKEY_QUIT => {

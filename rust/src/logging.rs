@@ -13,7 +13,7 @@ static FILE: OnceLock<Option<Mutex<std::fs::File>>> = OnceLock::new();
 
 pub fn init() {
     FILE.get_or_init(|| {
-        let path = log_path()?;
+        let path = path()?;
         if std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_BYTES) {
             let _ = std::fs::remove_file(&path);
         }
@@ -23,7 +23,8 @@ pub fn init() {
     log(&format!("\n--- started {} ---", now()));
 }
 
-fn log_path() -> Option<PathBuf> {
+/// The log file: DICTATION_LOG, or dictation.log next to the .exe.
+pub fn path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("DICTATION_LOG") {
         return Some(path.into());
     }
