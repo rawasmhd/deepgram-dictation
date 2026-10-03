@@ -45,7 +45,8 @@ const CLIPBOARD_DELAY_MS: u32 = 500;
 const LIVE_CHECK_FRAMES: u32 = 8;
 const MIN_SECONDS: f32 = 0.4; // ignore accidental taps
 
-/// The same name as in dictate.py, so only one version runs at a time.
+/// The same name as the old Python version (dictate.py), so an old copy and
+/// this one never run at the same time.
 const INSTANCE_MUTEX: &str = "DeepgramDictation_v1";
 
 type Transcript = Result<String, deepgram::Error>;

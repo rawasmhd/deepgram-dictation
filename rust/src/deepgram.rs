@@ -1,5 +1,4 @@
 //! Deepgram: streaming over a WebSocket, and batch upload of a WAV file.
-//! The query parameters are the same as in dictate.py.
 
 use std::io::ErrorKind;
 use std::net::{TcpStream, ToSocketAddrs};
@@ -347,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn query_has_the_dictate_py_params() {
+    fn query_has_the_expected_params() {
         let q = query(STREAM_PARAMS);
         assert!(q.starts_with("model=nova-3&language=en&"));
         assert!(q.ends_with("interim_results=false"));

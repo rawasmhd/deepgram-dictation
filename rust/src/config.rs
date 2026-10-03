@@ -19,8 +19,8 @@ pub fn streaming() -> bool {
     std::env::var("DICTATION_MODE").map_or(true, |m| m != "batch")
 }
 
-/// Streaming only: paste each phrase while you speak (default, like
-/// dictate.py). DICTATION_LIVE_PASTE=0 pastes all the text when you stop.
+/// Streaming only: paste each phrase while you speak (default).
+/// DICTATION_LIVE_PASTE=0 pastes all the text when you stop.
 pub fn live_paste() -> bool {
     std::env::var("DICTATION_LIVE_PASTE").map_or(true, |v| !matches!(v.as_str(), "0" | "false"))
 }

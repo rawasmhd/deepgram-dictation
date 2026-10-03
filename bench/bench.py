@@ -1,7 +1,7 @@
 """Benchmark a version of the dictation app from the outside.
 
-    python bench/bench.py --app python
-    python bench/bench.py --app rust --exe rust/target/release/dictation.exe
+    python bench/bench.py
+    python bench/bench.py --mode batch --live-paste off --exe path/to/dictation.exe
 
 The script starts the app, presses the hotkeys with SendInput, and watches
 the app's windows and a target text box. The app gets bench/sample.wav as
@@ -27,7 +27,6 @@ import sys
 import threading
 import time
 import wave
-from importlib import metadata
 from pathlib import Path
 
 BENCH_DIR = Path(__file__).resolve().parent
@@ -35,15 +34,11 @@ ROOT = BENCH_DIR.parent
 SAMPLE_WAV = BENCH_DIR / "sample.wav"
 SAMPLE_TEXT = (BENCH_DIR / "sample.txt").read_text(encoding="utf-8").strip()
 RESULTS_DIR = BENCH_DIR / "results"
-PYTHON_LOG = BENCH_DIR / "bench.log"     # run_python.py sends dictate.py's log here
+APP_LOG = BENCH_DIR / "bench.log"        # the app logs here during a run
+DEFAULT_EXE = ROOT / "rust" / "target" / "release" / "dictation.exe"
 
-# mutexes the app versions create, to detect a copy that is already running
-APP_MUTEXES = ["DeepgramDictation_v1", "DeepgramDictation_rs_prototype"]
-
-# packages that dictate.py needs, with their dependencies
-PY_PACKAGES = ["sounddevice", "numpy", "requests", "pynput", "pyperclip",
-               "websocket-client", "cffi", "pycparser", "urllib3", "idna",
-               "certifi", "charset-normalizer", "six"]
+# the app's single-instance mutex, to detect a copy that is already running
+APP_MUTEXES = ["DeepgramDictation_v1"]
 
 READY_TIMEOUT = 30.0
 PRESS_INTERVAL = 0.15       # between hotkey presses while waiting for startup
@@ -321,14 +316,12 @@ RUNNING = set()     # app processes started and not stopped yet
 
 
 def launch(args):
-    env = dict(os.environ)
-    if args.app == "python":
-        pythonw = Path(sys.executable).with_name("pythonw.exe")
-        cmd = [str(pythonw), str(BENCH_DIR / "run_python.py"), str(SAMPLE_WAV), *args.set]
-    else:
-        cmd = [str(Path(args.exe).resolve())]
-        env["DICTATION_FAKE_AUDIO"] = str(SAMPLE_WAV)
-    proc = subprocess.Popen(cmd, cwd=str(ROOT), env=env)
+    env = dict(os.environ,
+               DICTATION_FAKE_AUDIO=str(SAMPLE_WAV),   # the app hears sample.wav
+               DICTATION_LOG=str(APP_LOG),
+               DICTATION_MODE=args.mode,
+               DICTATION_LIVE_PASTE="1" if args.live_paste == "on" else "0")
+    proc = subprocess.Popen([str(Path(args.exe).resolve())], cwd=str(ROOT), env=env)
     RUNNING.add(proc)
     return proc
 
@@ -401,30 +394,8 @@ class AppLog:
 
 
 def install_size(args):
-    """Disk size in MB of what the app needs to run."""
-    mb = 1024 * 1024
-    if args.app == "rust":
-        return {"app_mb": Path(args.exe).stat().st_size / mb, "runtime_mb": 0.0}
-
-    def tree_size(path):
-        return sum(f.stat().st_size for f in Path(path).rglob("*") if f.is_file())
-
-    packages = 0
-    for name in PY_PACKAGES:
-        try:
-            dist = metadata.distribution(name)
-        except metadata.PackageNotFoundError:
-            continue
-        for f in dist.files or []:
-            p = Path(dist.locate_file(f))
-            if p.is_file():
-                packages += p.stat().st_size
-    base = Path(sys.base_prefix)
-    site = base / "Lib" / "site-packages"
-    python = tree_size(base) - (tree_size(site) if site.exists() else 0)
-    return {"app_mb": (ROOT / "dictate.py").stat().st_size / mb,
-            "runtime_mb": (python + packages) / mb,
-            "python_mb": python / mb, "packages_mb": packages / mb}
+    """Disk size in MB of what the app needs to run: only the .exe."""
+    return {"app_mb": Path(args.exe).stat().st_size / (1024 * 1024), "runtime_mb": 0.0}
 
 
 def words(text):
@@ -469,8 +440,7 @@ def benchmark(args, target, out):
         out["idle_cpu_percent"] = (cpu1 - cpu0) / (w1 - w0) * 100
         out["idle_memory"] = p.memory()
 
-        log_path = PYTHON_LOG if args.app == "python" else args.log
-        log = AppLog(log_path) if log_path else None
+        log = AppLog(APP_LOG)
         trials = []
         for i in range(args.trials):
             r = run_trial(proc.pid, target, not args.no_transcribe, audio_seconds, log)
@@ -512,20 +482,8 @@ def stop(proc):
 
 
 def app_settings(args):
-    """The settings that change the results, read from dictate.py."""
-    if args.app == "rust":
-        return args.settings or "not given (use --settings)"
-    src = (ROOT / "dictate.py").read_text(encoding="utf-8")
-    overrides = dict(a.split("=", 1) for a in args.set)
-    found = []
-    for name in ("TRANSCRIBE_MODE", "LIVE_PASTE", "AUTO_PASTE"):
-        m = re.search(rf"^{name}\s*=\s*(\S+)", src, re.M)
-        value = overrides.pop(name, m.group(1) if m else "?")
-        found.append(f"{name}={value}")
-    found += [f"{k}={v}" for k, v in overrides.items()]
-    m = re.search(r'"model":\s*"([^"]+)"', src)
-    found.append(f"model={m.group(1) if m else '?'}")
-    return ", ".join(found)
+    """The settings that change the results."""
+    return f"mode={args.mode}, live paste={args.live_paste if args.mode == 'streaming' else 'off'}"
 
 
 def git_commit():
@@ -562,8 +520,7 @@ def to_markdown(out):
         ("Exact transcript (text box = sample.txt)", count("exact_transcript_trials")),
         ("Transcript accuracy (word match, median)",
          f"{out['accuracy']['median'] * 100:.0f} %" if out.get("accuracy") else "n/a"),
-        ("Disk: app files", f"{size['app_mb']:.2f} MB"),
-        ("Disk: runtime (Python and packages)", f"{size['runtime_mb']:.1f} MB"),
+        ("Disk (app and runtime)", f"{size['app_mb'] + size['runtime_mb']:.1f} MB"),
     ]
     lines = [f"# Benchmark: {out['label']}", "",
              f"- Date: {out['date']}",
@@ -581,8 +538,10 @@ def to_markdown(out):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--app", choices=["python", "rust"], required=True)
-    ap.add_argument("--exe", help="path to dictation.exe (for --app rust)")
+    ap.add_argument("--exe", default=str(DEFAULT_EXE), help="path to dictation.exe")
+    ap.add_argument("--mode", choices=["streaming", "batch"], default="streaming")
+    ap.add_argument("--live-paste", choices=["on", "off"], default="on",
+                    help="streaming only: paste each phrase while speaking")
     ap.add_argument("--trials", type=int, default=10)
     ap.add_argument("--idle-seconds", type=float, default=10.0)
     ap.add_argument("--startups", type=int, default=3,
@@ -590,21 +549,17 @@ def main():
     ap.add_argument("--no-transcribe", action="store_true",
                     help="skip the stop-to-paste measurement (for the prototype)")
     ap.add_argument("--label", help="name for the results files")
-    ap.add_argument("--settings", help="the app settings, for --app rust")
-    ap.add_argument("--log", help="the app's log file with '-> text' lines, for --app rust")
-    ap.add_argument("--set", action="append", default=[], metavar="NAME=VALUE",
-                    help="override a dictate.py setting, for --app python")
     args = ap.parse_args()
-    if args.app == "rust" and not args.exe:
-        ap.error("--app rust needs --exe")
+    if not Path(args.exe).exists():
+        ap.error(f"{args.exe} not found; build it with 'cargo build --release' in rust/")
 
     running = any_app_running()
     if running:
         sys.exit(f"A copy of the app is running (mutex {running}). Stop it first.")
 
     user32.SetProcessDPIAware()
-    label = args.label or f"{args.app}-{time.strftime('%Y-%m-%d')}"
-    out = {"label": label, "app": args.app, "date": time.strftime("%Y-%m-%d %H:%M"),
+    label = args.label or f"rust-{args.mode}-{time.strftime('%Y-%m-%d')}"
+    out = {"label": label, "app": "rust", "date": time.strftime("%Y-%m-%d %H:%M"),
            "commit": git_commit(), "trials_requested": args.trials,
            "idle_seconds": args.idle_seconds,
            "machine": f"{platform.platform()}, {os.cpu_count()} logical CPUs",

@@ -1,5 +1,5 @@
 //! The floating meter. A layered window with per-pixel alpha, so the
-//! rounded corners are smooth (dictate.py punches out a colour key instead).
+//! rounded corners are smooth.
 //! It never takes focus and never intercepts a click.
 
 use std::{collections::VecDeque, mem, ptr, time::Instant};
@@ -10,7 +10,7 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::HiDpi::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-// Layout in logical pixels (96 dpi), the same as dictate.py.
+// Layout in logical pixels (96 dpi).
 const W: f32 = 336.0;
 const H: f32 = 68.0;
 const RADIUS: f32 = 16.0;
