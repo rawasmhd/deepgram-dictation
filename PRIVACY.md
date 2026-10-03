@@ -9,13 +9,14 @@ deepgram-dictation runs on your PC. It has no server of its own and collects no 
 
 ## What stays on your PC
 
-- **Your API key**, in the `.env` file next to the app.
+- **Your API key**, in the `.env` file next to `dictation.exe`.
+- **The start at login**, if you chose it in the setup: an entry named `DeepgramDictation` in your user's Run registry key.
 - **The transcribed text**, on the clipboard. If Windows clipboard history is on, Windows keeps a copy there too.
-- **A log file** (`dictation.log`), which contains the transcribed text of each dictation. You can delete it at any time. The app deletes it when it is larger than 1 MB.
+- **A log file** (`dictation.log`, next to `dictation.exe`), which contains the transcribed text of each dictation. You can delete it at any time. The app deletes it when it is larger than 1 MB.
 
 ## Keyboard
 
-The app registers global hotkeys (Alt+M, Ctrl+Alt+Z, Ctrl+Alt+Q) and simulates Ctrl+V and Backspace to paste and undo. It also watches the keyboard, only to detect the hotkeys and to notice that you typed (which cancels undo). It stores and sends no keystrokes.
+The app registers global hotkeys with Windows (Alt+M, Ctrl+Alt+Z, Ctrl+Alt+Q) and simulates Ctrl+V and Backspace to paste and undo. It also uses a keyboard hook, only to notice *that* you typed after a dictation (which cancels undo). It never records which keys you press, and it stores and sends no keystrokes.
 
 ## Contact
 

@@ -119,6 +119,11 @@ cargo build --release
 
 The benchmark that compares versions is in [`bench/`](bench).
 
+## Privacy and code signing
+
+- [Privacy policy](PRIVACY.md): the app sends your microphone audio to Deepgram only while you record, and nothing else.
+- [Code signing policy](CODE_SIGNING.md): how releases are built and signed.
+
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](.github/CONTRIBUTING.md). **macOS support** is the most-wanted addition ([#1](https://github.com/rawasmhd/deepgram-dictation/issues/1)).
