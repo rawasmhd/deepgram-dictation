@@ -2,12 +2,21 @@
 name = "dictation"
 version = "0.1.0"
 edition = "2021"
-description = "Push-to-talk dictation for Windows (Rust rewrite, prototype)"
+description = "Push-to-talk dictation for Windows (Rust rewrite)"
 license = "MIT"
 publish = false
 
 [dependencies]
 cpal = "0.15"
+hound = "3"
+# Pinned: newer schannel uses windows-sys 0.61, which needs dlltool.exe
+# (not part of the GNU toolchain). Unpin when we build with MSVC (#11).
+native-tls = "=0.2.14"
+schannel = "=0.1.27"
+serde_json = "1"
+# Windows' own TLS (SChannel) for both, so no C compiler is needed
+tungstenite = { version = "0.24", features = ["native-tls"] }
+ureq = { version = "2", default-features = false, features = ["native-tls"] }
 
 [dependencies.windows-sys]
 version = "0.59"

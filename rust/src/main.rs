@@ -1,20 +1,21 @@
-//! Deepgram dictation, Rust rewrite - prototype.
+//! Deepgram dictation, Rust rewrite.
 //!
-//!   Alt+M        start "recording" (the meter shows the live mic level)
-//!   Alt+M        stop; after a short "Transcribing" animation a test
-//!                sentence is pasted at the cursor
+//!   Alt+M        start dictating
+//!   Alt+M        stop, transcribe, paste at the cursor
 //!   Ctrl+Alt+Q   quit
 //!
-//! This prototype checks the hard parts of the rewrite: the global hotkey,
-//! the paste, and the floating meter. It does not call Deepgram yet.
+//! Not ported yet: live paste and undo (#9), setup and logging (#10).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod mic;
+mod audio;
+mod config;
+mod deepgram;
 mod overlay;
 mod paste;
 
-use std::{cell::RefCell, ptr, time::Instant};
+use std::io::Write;
+use std::{cell::RefCell, ptr, thread};
 
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::System::Threading::{CreateMutexW, OpenMutexW};
@@ -26,20 +27,22 @@ use overlay::{wide, Overlay, State, TIMER_FRAME};
 
 const HOTKEY_TOGGLE: i32 = 1;
 const HOTKEY_QUIT: i32 = 2;
-const TIMER_WORK: usize = 2;
-const FAKE_TRANSCRIBE_MS: u32 = 600;
+/// Posted by the worker thread when the transcript is ready.
+const WM_TRANSCRIPT: u32 = WM_APP + 1;
 const MIN_SECONDS: f32 = 0.4; // ignore accidental taps
 
 const PYTHON_MUTEX: &str = "DeepgramDictation_v1"; // created by dictate.py
 const OWN_MUTEX: &str = "DeepgramDictation_rs_prototype";
 const SYNCHRONIZE: u32 = 0x0010_0000;
 
+type Transcript = Result<String, deepgram::Error>;
+
 struct App {
     hwnd: HWND,
+    key: String,
     overlay: Overlay,
-    mic: Option<mic::Mic>,
-    recording_since: Option<Instant>,
-    seconds: f32,
+    recording: Option<audio::Recording>,
+    stream: Option<deepgram::Stream>,
 }
 
 thread_local! {
@@ -58,10 +61,15 @@ fn main() {
         }
         CreateMutexW(ptr::null(), 0, wide(OWN_MUTEX).as_ptr());
         if GetLastError() == ERROR_ALREADY_EXISTS {
-            println!("already running, exiting");
+            log("already running, exiting");
             return;
         }
     }
+
+    let Some(key) = config::api_key() else {
+        alert("No API key found.\n\nPut DEEPGRAM_API_KEY=... in a .env file next to dictation.exe.");
+        return;
+    };
 
     let hwnd = overlay::create_window(Some(wndproc));
     if hwnd.is_null() {
@@ -78,15 +86,18 @@ fn main() {
             return;
         }
     }
-    println!("hotkey: ALT+M   quit: CTRL+ALT+Q");
+    log(&format!(
+        "--- started --- hotkey: ALT+M   quit: CTRL+ALT+Q   mode: {}",
+        if config::streaming() { "streaming" } else { "batch" }
+    ));
 
     APP.with(|a| {
         *a.borrow_mut() = Some(App {
             hwnd,
+            key,
             overlay: Overlay::new(hwnd),
-            mic: None,
-            recording_since: None,
-            seconds: 0.0,
+            recording: None,
+            stream: None,
         })
     });
 
@@ -97,7 +108,7 @@ fn main() {
             DispatchMessageW(&msg);
         }
     }
-    println!("stopped");
+    log("stopped");
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -108,6 +119,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         WM_TIMER => {
             with_app(|app| app.on_timer(wp));
+            0
+        }
+        WM_TRANSCRIPT => {
+            // the worker thread gave up ownership of this box
+            let result = *Box::from_raw(lp as *mut Transcript);
+            with_app(|app| app.on_transcript(result));
             0
         }
         _ => DefWindowProcW(hwnd, msg, wp, lp),
@@ -129,62 +146,114 @@ impl App {
     fn on_hotkey(&mut self, id: i32) {
         match id {
             HOTKEY_QUIT => {
-                self.mic = None;
+                self.recording = None;
+                self.stream = None;
                 unsafe { PostQuitMessage(0) };
             }
-            HOTKEY_TOGGLE if self.overlay.is_working() => {} // still busy
-            HOTKEY_TOGGLE => match self.recording_since.take() {
+            HOTKEY_TOGGLE if self.overlay.is_working() => {} // still transcribing
+            HOTKEY_TOGGLE => match self.recording.take() {
                 None => self.start(),
-                Some(since) => self.stop(since.elapsed().as_secs_f32()),
+                Some(recording) => self.stop(recording),
             },
             _ => {}
         }
     }
 
     fn start(&mut self) {
-        match mic::start() {
-            Ok(m) => {
-                self.mic = Some(m);
-                self.recording_since = Some(Instant::now());
+        let (stream, sink) = if config::streaming() {
+            let (stream, sink) = deepgram::Stream::start(self.key.clone());
+            (Some(stream), Some(sink))
+        } else {
+            (None, None)
+        };
+        match audio::start(sink) {
+            Ok(recording) => {
+                self.recording = Some(recording);
+                self.stream = stream;
                 self.overlay.set_state(State::Recording);
             }
             Err(e) => {
-                println!("microphone unavailable: {e}");
+                log(&format!("microphone unavailable: {e}"));
                 self.overlay.set_state(State::Notice { text: "Microphone unavailable".into(), error: true });
             }
         }
     }
 
-    fn stop(&mut self, seconds: f32) {
-        self.mic = None;
+    fn stop(&mut self, recording: audio::Recording) {
+        // stopping closes the audio channel, so the stream starts to finish
+        let samples = recording.stop();
+        let stream = self.stream.take();
+        let seconds = samples.len() as f32 / audio::SAMPLE_RATE as f32;
         if seconds < MIN_SECONDS {
             self.overlay.set_state(State::Hidden);
             return;
         }
-        self.seconds = seconds;
         self.overlay.set_state(State::Working);
-        unsafe { SetTimer(self.hwnd, TIMER_WORK, FAKE_TRANSCRIBE_MS, None) };
+
+        // wait for Deepgram off the UI thread, so the meter keeps moving
+        let key = self.key.clone();
+        let hwnd = self.hwnd as isize;
+        thread::spawn(move || {
+            let result = transcribe(&key, stream, &samples);
+            let boxed = Box::into_raw(Box::new(result)) as isize;
+            unsafe {
+                if PostMessageW(hwnd as HWND, WM_TRANSCRIPT, 0, boxed) == 0 {
+                    drop(Box::from_raw(boxed as *mut Transcript));
+                }
+            }
+        });
     }
 
-    fn on_timer(&mut self, id: usize) {
-        match id {
-            TIMER_FRAME => self.overlay.tick(mic::level()),
-            TIMER_WORK => {
-                unsafe { KillTimer(self.hwnd, TIMER_WORK) };
+    fn on_transcript(&mut self, result: Transcript) {
+        match result {
+            Ok(text) if text.is_empty() => {
+                self.overlay.set_state(State::Notice { text: "No speech detected".into(), error: true });
+            }
+            Ok(text) => {
+                log(&format!("-> {text}"));
                 self.overlay.set_state(State::Hidden);
-                let text = format!("Rust prototype test: {:.1} seconds recorded.", self.seconds);
-                println!("-> {text}");
                 if !paste::paste(self.hwnd, &text) {
                     self.overlay.set_state(State::Notice { text: "Clipboard busy".into(), error: true });
                 }
             }
-            _ => {}
+            Err(e) => {
+                log(&format!("transcription failed: {e}"));
+                self.overlay.set_state(State::Notice { text: e.message(), error: true });
+            }
+        }
+    }
+
+    fn on_timer(&mut self, id: usize) {
+        if id == TIMER_FRAME {
+            self.overlay.tick(audio::level());
+        }
+    }
+}
+
+/// Streaming text if there is any, else a batch upload of the recording
+/// (for example when the socket never connected).
+fn transcribe(key: &str, stream: Option<deepgram::Stream>, samples: &[i16]) -> Transcript {
+    if let Some(stream) = stream {
+        let text = stream.finish();
+        if !text.is_empty() {
+            return Ok(text);
+        }
+        log("streaming produced no text; trying batch fallback");
+    }
+    deepgram::transcribe(key, samples)
+}
+
+pub fn log(msg: &str) {
+    println!("{msg}");
+    if let Some(path) = config::log_file() {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{msg}");
         }
     }
 }
 
 fn alert(msg: &str) {
-    println!("{msg}");
+    log(msg);
     unsafe {
         MessageBoxW(
             ptr::null_mut(),
