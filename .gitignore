@@ -17,5 +17,8 @@ APPLICATION_DRAFT.md
 # not part of this project — unrelated local directory
 RawBrain/
 
+# Rust build output
+rust/target/
+
 # Benchmark log
 bench/bench.log
