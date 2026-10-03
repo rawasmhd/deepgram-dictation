@@ -14,3 +14,8 @@ Upgrading from the Python version: see "Upgrading from the Python version" in th
 - **"Windows protected your PC"** (SmartScreen): select **More info → Run anyway**.
 - **"Smart App Control blocked an app"**: Windows does not let you run unsigned apps while Smart App Control is on. The app can run on such a PC only after it is signed.
 - **Antivirus warnings**: the app registers global hotkeys, pastes with a simulated Ctrl+V, and uses a keyboard hook to notice typing for undo. The source code is in this repository.
+
+## Privacy and code signing
+
+- [Privacy policy](https://github.com/rawasmhd/deepgram-dictation/blob/main/PRIVACY.md)
+- [Code signing policy](https://github.com/rawasmhd/deepgram-dictation/blob/main/CODE_SIGNING.md)
