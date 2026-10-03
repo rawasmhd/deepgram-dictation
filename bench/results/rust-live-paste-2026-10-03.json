@@ -1,0 +1,164 @@
+{
+  "label": "rust-live-paste-2026-10-03",
+  "app": "rust",
+  "date": "2026-10-03 12:17",
+  "commit": "f9bf061",
+  "trials_requested": 10,
+  "idle_seconds": 10.0,
+  "machine": "Windows-11-10.0.26200-SP0, 16 logical CPUs",
+  "install": {
+    "app_mb": 1.01806640625,
+    "runtime_mb": 0.0
+  },
+  "settings": "streaming, live paste on",
+  "startup_s": {
+    "n": 3,
+    "min": 0.15326130017638206,
+    "median": 0.1537767997942865,
+    "p90": 0.154500899836421,
+    "max": 0.154500899836421
+  },
+  "idle_cpu_percent": 0.0,
+  "idle_memory": {
+    "working_set_mb": 14.2890625,
+    "private_mb": 3.40234375,
+    "peak_working_set_mb": 14.328125
+  },
+  "trials": [
+    {
+      "hotkey_to_meter_ms": 6.134700030088425,
+      "start_to_first_text_ms": 3504.1988999582827,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 13.42549966648221,
+      "start_to_first_text_ms": 3492.5339999608696,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 6.977400276809931,
+      "start_to_first_text_ms": 3499.82270039618,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 7.200300227850676,
+      "start_to_first_text_ms": 3205.359200015664,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 8.011600002646446,
+      "start_to_first_text_ms": 5010.692600160837,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 0.6829268292682927,
+      "exact_transcript": false,
+      "paste_complete": false
+    },
+    {
+      "hotkey_to_meter_ms": 7.316599600017071,
+      "start_to_first_text_ms": 3173.7779998220503,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 9.066700004041195,
+      "start_to_first_text_ms": 3147.0456002280116,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 6.725599989295006,
+      "start_to_first_text_ms": 8755.66599983722,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 6.983200088143349,
+      "start_to_first_text_ms": 3174.9408999457955,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    },
+    {
+      "hotkey_to_meter_ms": 7.357999682426453,
+      "start_to_first_text_ms": 3116.658200044185,
+      "stop_to_all_text_ms": 0.0,
+      "text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "app_text": "This is a benchmark for the dictation app it measures how long it takes from the moment you stop speaking until the text appears at the cursor",
+      "accuracy": 1.0,
+      "exact_transcript": true,
+      "paste_complete": true
+    }
+  ],
+  "after_trials_memory": {
+    "working_set_mb": 14.8984375,
+    "private_mb": 3.8203125,
+    "peak_working_set_mb": 16.52734375
+  },
+  "hotkey_to_meter_ms": {
+    "n": 10,
+    "min": 6.134700030088425,
+    "median": 7.258449913933873,
+    "p90": 9.066700004041195,
+    "max": 13.42549966648221
+  },
+  "start_to_first_text_ms": {
+    "n": 10,
+    "min": 3116.658200044185,
+    "median": 3348.946599988267,
+    "p90": 5010.692600160837,
+    "max": 8755.66599983722
+  },
+  "stop_to_all_text_ms": {
+    "n": 10,
+    "min": 0.0,
+    "median": 0.0,
+    "p90": 0.0,
+    "max": 0.0
+  },
+  "accuracy": {
+    "n": 10,
+    "min": 0.6829268292682927,
+    "median": 1.0,
+    "p90": 1.0,
+    "max": 1.0
+  },
+  "exact_transcript_trials": 9,
+  "paste_complete_trials": 9
+}

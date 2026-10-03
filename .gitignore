@@ -4,7 +4,7 @@
 # runtime
 dictation.log
 
-# python
+# python (the benchmark in bench/)
 __pycache__/
 *.pyc
 
@@ -16,6 +16,9 @@ APPLICATION_DRAFT.md
 
 # not part of this project — unrelated local directory
 RawBrain/
+
+# Rust build output
+rust/target/
 
 # Benchmark log
 bench/bench.log

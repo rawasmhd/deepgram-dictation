@@ -1,0 +1,35 @@
+name: Release
+
+# Push a tag such as v2.0.0 to build dictation.exe and publish it as a
+# GitHub release. The .exe is not signed yet (#19).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        working-directory: rust
+        run: cargo build --release --locked
+
+      - name: Run tests
+        working-directory: rust
+        run: cargo test --locked
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          rust/target/release/dictation.exe
+          --title "${{ github.ref_name }}"
+          --notes-file .github/release-notes.md
+          --generate-notes

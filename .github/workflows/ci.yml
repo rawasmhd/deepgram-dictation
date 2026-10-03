@@ -6,30 +6,44 @@ on:
   pull_request:
 
 jobs:
-  test:
+  rust:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: rust
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Cache cargo
+        uses: actions/cache@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock') }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install sounddevice numpy requests pynput pyperclip websocket-client pytest
-
-      - name: Compile check
-        run: python -m py_compile dictate.py
-
-      - name: Import smoke test
-        run: python -c "import dictate; print('import OK')"
+      - name: Build
+        run: cargo build --release --locked
 
       - name: Run tests
-        run: python -m pytest -q
+        run: cargo test --locked
+
+      - name: Upload dictation.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: dictation-exe
+          path: rust/target/release/dictation.exe
+
+  bench:
+    # the benchmark needs a desktop and a Deepgram key, so CI only compiles it
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Compile check
+        run: python -m py_compile bench/bench.py
