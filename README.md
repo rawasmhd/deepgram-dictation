@@ -36,7 +36,7 @@ That's it. Press **Alt+M** anywhere to dictate.
 
 ## Windows security prompts
 
-`dictation.exe` is not code-signed yet ([#19](https://github.com/rawasmhd/deepgram-dictation/issues/19)), so Windows may warn you the first time:
+`dictation.exe` is not code-signed yet. Code signing is being set up with [SignPath Foundation](https://signpath.org), which provides free code signing for open-source projects (see the [code signing policy](CODE_SIGNING.md) and [#19](https://github.com/rawasmhd/deepgram-dictation/issues/19)). Until then, Windows may warn you the first time:
 
 - **"Windows protected your PC"** (SmartScreen): select **More info → Run anyway**.
 - **"Smart App Control blocked an app"**: while Smart App Control is on, Windows does not run unsigned apps, and there is no way past it. The app can run on such a PC only after it is signed.
