@@ -33,3 +33,32 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+  rust:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Upload dictation.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: dictation-exe
+          path: rust/target/release/dictation.exe

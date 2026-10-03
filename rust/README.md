@@ -27,6 +27,15 @@ The app is `target\release\dictation.exe`. A debug build (`cargo build`) shows a
 
 The GNU toolchain has no `dlltool.exe`, so `native-tls` and `schannel` are pinned in `Cargo.toml` to versions that do not need it.
 
+## Releases
+
+CI builds and tests `dictation.exe` on every push and pull request (`.github/workflows/ci.yml`). A tag such as `v2.0.0` publishes it as a GitHub release (`.github/workflows/release.yml`).
+
+The `.exe` is not code-signed yet (#19):
+
+- SmartScreen shows **"Windows protected your PC"**. Select **More info → Run anyway**.
+- With **Smart App Control** on, Windows blocks the app, and there is no way past it. Use the Python version until the `.exe` is signed.
+
 ## Run
 
 Stop the Python version first (`scripts\Stop Dictation.bat`). The Rust version does not start while the Python version runs.
