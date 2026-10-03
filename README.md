@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rawasmhd/deepgram-dictation/actions/workflows/ci.yml/badge.svg)](https://github.com/rawasmhd/deepgram-dictation/actions/workflows/ci.yml)
 
-Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+M** again, and the transcribed text is pasted at your cursor, in any app. The only thing on screen is a small level meter that floats above the taskbar while you talk.
+Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+M** again, and the transcribed text is pasted at your cursor, in any app. On screen there is only a small level meter that floats above the taskbar while you talk, and an icon in the notification area.
 
 Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores no audio.
 
@@ -18,6 +18,8 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores
 - Works in any application: the text goes wherever your cursor is
 - **Live paste**: each phrase appears while you speak, so all the text is in place the moment you stop
 - Floating microphone meter while recording, and a "Transcribing" animation while it works
+- A tray icon that shows the state (recording, transcribing, a problem), with a menu for the settings, start at login, the log file and quit
+- Follows the Windows light or dark mode
 - Keeps your dictation on the clipboard, so nothing is lost if no text box had focus
 - Smart formatting and spoken punctuation ("comma", "new paragraph") with Deepgram's `nova-3`
 - **One small file**: `dictation.exe` is about 1 MB, needs no Python or other runtime, and uses about 15 MB of memory
@@ -29,7 +31,7 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores
 3. Put it in a folder that you keep, for example `%LOCALAPPDATA%\DeepgramDictation`. The app saves its settings (`.env`) and its log (`dictation.log`) next to the `.exe`.
 4. Double-click `dictation.exe`. A setup window opens:
    - Paste your API key. The app checks it with Deepgram before it saves it.
-   - Keep **Start automatically when I log in** selected, if you want it at every login.
+   - Keep **Start when I sign in to Windows** on, if you want it at every login.
    - Select **Save**.
 
 That's it. Press **Alt+M** anywhere to dictate.
@@ -55,7 +57,8 @@ More:
 - Live paste writes only into the window that had focus when you started. If you switch to another window, the meter shows **Paused**, and the text waits until you come back. If you stop in another window after some text was pasted, the rest goes only to the clipboard. If no text was pasted yet, all of it goes into the window that has focus when you stop.
 - **Ctrl+Alt+Z** deletes the last dictation with Backspace. It works only in the same window and if you have not typed since. A mouse click does not cancel it, so do not click somewhere else in the text first.
 - To start the app again after Ctrl+Alt+Q, double-click `dictation.exe`.
-- To change the API key or the start at login, run `dictation.exe --setup`.
+- To change the API key or the start at login, select the tray icon, then **Settings…**. You can also run `dictation.exe --setup`.
+- The tray menu can also start and stop a dictation. The text goes into the window you used last.
 
 ## Settings
 

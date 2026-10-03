@@ -12,6 +12,9 @@ This folder holds the app: `dictation.exe`, written in Rust. It replaced the Pyt
 - Undo with **Ctrl+Alt+Z**: deletes the last dictation, if you have not typed since and the same window has focus.
 
 - A setup window on the first start (or with `dictation.exe --setup`): it asks for the API key, checks it with Deepgram, saves it to `.env` next to the `.exe`, and can start the app at login.
+- A tray icon with the state and a menu: start or stop, Settings…, Start at login, Open log file, Quit.
+- The app icon (in the `.exe`, the windows and the tray), drawn from code in `src/art.rs`. `build.rs` puts it into the `.exe` with the version resource and the manifest (MSVC builds only).
+- Light and dark mode, from the Windows setting.
 - A log file, `dictation.log`, next to the `.exe`.
 - Only one copy runs at a time (also not next to an old Python copy).
 
