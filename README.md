@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/rawasmhd/deepgram-dictation/actions/workflows/ci.yml/badge.svg)](https://github.com/rawasmhd/deepgram-dictation/actions/workflows/ci.yml)
 
-Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+M** again, and the transcribed text is pasted at your cursor — in any app. The only thing on screen is a small level meter that floats above the taskbar while you talk.
+Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+M** again, and the transcribed text is pasted at your cursor, in any app. The only thing on screen is a small level meter that floats above the taskbar while you talk.
 
-Audio goes to [Deepgram](https://deepgram.com) for transcription; nothing is stored.
+Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores no audio.
 
 <p align="center">
   <img src="assets/meter-demo.gif" alt="The floating meter: live level bars and a timer while recording, then a Transcribing scan animation" width="420">
@@ -12,104 +12,117 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription; nothing is sto
 
 ## Features
 
-- **Alt+M** to start, **Alt+M** to stop, transcribe, and paste
+- **Alt+M** to start, **Alt+M** to stop and paste
 - **Ctrl+Alt+Z** to delete the last dictation (if you have not typed since)
 - **Ctrl+Alt+Q** to quit
-- Works in any application — the text is pasted wherever your cursor is
-- **Low latency** — streams audio to Deepgram live as you talk, so the text lands almost the moment you stop (switchable to batch mode)
-- Floating microphone meter while recording; a "Transcribing" animation while it works
-- Runs silently in the background, no console window, no taskbar clutter
-- Keeps your dictation on the clipboard, so nothing is lost if no text box was focused
-- Smart formatting and spoken punctuation ("comma", "new paragraph") via Deepgram's `nova-3`
+- Works in any application: the text goes wherever your cursor is
+- **Live paste**: each phrase appears while you speak, so all the text is in place the moment you stop
+- Floating microphone meter while recording, and a "Transcribing" animation while it works
+- Keeps your dictation on the clipboard, so nothing is lost if no text box had focus
+- Smart formatting and spoken punctuation ("comma", "new paragraph") with Deepgram's `nova-3`
+- **One small file**: `dictation.exe` is about 1 MB, needs no Python or other runtime, and uses about 15 MB of memory
 
 ## Install
 
-Requires **Python 3** on your PATH ([python.org](https://www.python.org/downloads/) — tick *Add python.exe to PATH*) and a Deepgram API key ([console.deepgram.com](https://console.deepgram.com) → API Keys; new accounts get free credit).
-
-Double-click **`setup.bat`**. It will:
-
-1. install the Python packages (`sounddevice`, `numpy`, `requests`, `pynput`, `pyperclip`, `websocket-client`)
-2. ask for your Deepgram API key and save it to `.env`
-3. register itself to start at login
-4. launch it
+1. Get a Deepgram API key at [console.deepgram.com](https://console.deepgram.com), under **API Keys**. New accounts get free credit.
+2. Download `dictation.exe` from the [latest release](https://github.com/rawasmhd/deepgram-dictation/releases/latest).
+3. Put it in a folder that you keep, for example `%LOCALAPPDATA%\DeepgramDictation`. The app saves its settings (`.env`) and its log (`dictation.log`) next to the `.exe`.
+4. Double-click `dictation.exe`. A setup window opens:
+   - Paste your API key. The app checks it with Deepgram before it saves it.
+   - Keep **Start automatically when I log in** selected, if you want it at every login.
+   - Select **Save**.
 
 That's it. Press **Alt+M** anywhere to dictate.
 
 ## Windows security prompts
 
-This is an unsigned script (not a code-signed `.exe`), so Windows may warn you the first time you run `setup.bat`. There's nothing malicious here — the full source is right in front of you — but here's how to get past the friction:
+`dictation.exe` is not code-signed yet ([#19](https://github.com/rawasmhd/deepgram-dictation/issues/19)), so Windows may warn you the first time:
 
-- **Cleanest fix: clone instead of downloading the ZIP.** Files pulled by `git clone` aren't tagged with the "Mark of the Web", so no warning appears at all:
-  ```bash
-  git clone https://github.com/rawasmhd/deepgram-dictation
-  ```
-- **If you downloaded the ZIP** and see *"Windows protected your PC"*, click **More info → Run anyway**. Or unblock the files first, from a PowerShell window in the folder:
-  ```bash
-  Get-ChildItem *.bat | Unblock-File
-  ```
-- **Antivirus may flag it.** To detect Alt+M the app installs a global keyboard hook, and it simulates Ctrl+V to paste — behaviour that looks keylogger-like to some scanners. That's inherent to how a background dictation hotkey works; read `dictate.py` if you want to confirm what it does.
+- **"Windows protected your PC"** (SmartScreen): select **More info → Run anyway**.
+- **"Smart App Control blocked an app"**: while Smart App Control is on, Windows does not run unsigned apps, and there is no way past it. The app can run on such a PC only after it is signed.
+- **Antivirus warnings**: the app registers global hotkeys, simulates Ctrl+V and Backspace, and uses a keyboard hook that only notices *that* you typed (to cancel undo). Some scanners find this suspicious. The full source code is in [`rust/src`](rust/src).
 
 ## Usage
 
 1. Put your cursor where you want the text.
-2. Press **Alt+M** — the meter appears above your taskbar.
-3. Speak.
-4. Press **Alt+M** again — the meter shows "Transcribing", then the text is pasted.
+2. Press **Alt+M**. The meter appears above your taskbar.
+3. Speak. Each phrase is pasted as soon as Deepgram finishes it.
+4. Press **Alt+M** again. The rest of the text is pasted, and all of it is on the clipboard.
 
-Taps shorter than 0.4s are ignored, so a stray press won't send an empty request.
+More:
 
-The other batch files live in [`scripts/`](scripts):
+- Taps shorter than 0.4 s are ignored, so a stray press does not send an empty request.
+- Live paste writes only into the window that had focus when you started. If you switch to another window, the meter shows **Paused**, and the text waits until you come back. If you stop in another window after some text was pasted, the rest goes only to the clipboard. If no text was pasted yet, all of it goes into the window that has focus when you stop.
+- **Ctrl+Alt+Z** deletes the last dictation with Backspace. It works only in the same window and if you have not typed since. A mouse click does not cancel it, so do not click somewhere else in the text first.
+- To start the app again after Ctrl+Alt+Q, double-click `dictation.exe`.
+- To change the API key or the start at login, run `dictation.exe --setup`.
 
-- **`scripts/Start Dictation.bat`** — relaunch after you've quit with Ctrl+Alt+Q
-- **`scripts/Stop Dictation.bat`** — stop the background process
-- **`scripts/Troubleshoot.bat`** — run with a visible console to see errors
+## Settings
 
-## How it works
+Two environment variables change how it transcribes:
 
-A single `dictate.py` runs in the background under `pythonw.exe` (so there's no console window). A global keyboard listener ([pynput](https://pypi.org/project/pynput/)) watches for the hotkey.
-
-On the first Alt+M it opens a 16 kHz mono microphone stream with [sounddevice](https://pypi.org/project/sounddevice/). By default (`TRANSCRIBE_MODE = "streaming"`) the audio is sent to Deepgram **live over a WebSocket as you talk**, so the transcript is almost ready the moment you stop — press Alt+M again and it waits only for the last fragment (~300–500ms) before pasting. In `"batch"` mode it instead buffers the whole clip and uploads it to Deepgram's `/v1/listen` after you stop, which is simpler but slower for longer utterances. Either way it copies the result to the clipboard and simulates **Ctrl+V** to paste, then restores your previous clipboard contents. Streaming falls back to batch automatically if `websocket-client` is missing or the connection fails.
-
-The floating meter is a borderless, click-through Tkinter overlay. On Windows it's given the `WS_EX_TRANSPARENT | WS_EX_NOACTIVATE` styles so it never steals focus or intercepts a click.
-
-## Customizing
-
-The knobs are constants at the top of `dictate.py`:
-
-| Constant | Default | What it does |
+| Variable | Default | Effect |
 |---|---|---|
-| `TRANSCRIBE_MODE` | `"streaming"` | `streaming` (live, low-latency) or `batch` (upload after you stop) |
-| `HOTKEY_MODIFIERS` / `HOTKEY_CHAR` | `{"alt"}` / `"m"` | The start/stop hotkey |
-| `AUTO_PASTE` | `True` | `False` = copy to clipboard only, don't paste |
-| `LIVE_PASTE` | `True` | Streaming only: paste each phrase while you speak. Text goes only into the window that had focus when you started; if you switch away, the meter shows "Paused" and the text waits until you come back. If you stop in another window, the full text is copied instead of pasted |
-| `UNDO_MODIFIERS` / `UNDO_CHAR` | `{"ctrl", "alt"}` / `"z"` | Hotkey that deletes the last dictation with Backspace. Any key you press after a dictation cancels it; mouse clicks do not, so do not click elsewhere in the text first |
-| `RESTORE_CLIPBOARD` | `False` | Put your previous clipboard back after pasting (off by default, so the dictation stays on the clipboard) |
-| `BEEP` | `False` | Short tones on start / stop / done / error |
-| `MIN_SECONDS` | `0.4` | Ignore taps shorter than this |
-| `OVERLAY_POSITION` | `"taskbar"` | `center` \| `top` \| `bottom` \| `taskbar` |
-| `OVERLAY_MARGIN` | `12` | Gap above the taskbar, in pixels |
-| `DG_PARAMS` | `nova-3`, `en` | Deepgram model, language, formatting options |
+| `DICTATION_MODE` | streaming | `batch` uploads the recording after you stop. This is simpler, but the wait grows with how long you spoke. |
+| `DICTATION_LIVE_PASTE` | on | `0` pastes all the text when you stop, not phrase by phrase. |
 
-To dictate in another language, change `"language"` in `DG_PARAMS` (see [Deepgram's language list](https://developers.deepgram.com/docs/models-languages-overview)).
+The language (`en`) and the model (`nova-3`) are set in [`rust/src/deepgram.rs`](rust/src/deepgram.rs). To dictate in another language, change `"language"` there and build the app again (see [Deepgram's language list](https://developers.deepgram.com/docs/models-languages-overview)).
+
+## Upgrading from the Python version
+
+Earlier versions were a Python script (`dictate.py`) with `setup.bat`. To move to `dictation.exe`:
+
+1. Quit the Python version with **Ctrl+Alt+Q**. Only one version can run at a time.
+2. Copy your `.env` file next to `dictation.exe`, so you do not need to enter the key again. Or run `dictation.exe --setup` and paste the key.
+3. In the setup, select **Start automatically when I log in**. This also removes the Python version's Startup shortcut.
+
+The Python version is still in the Git history, in the commits before #23.
+
+## Uninstall
+
+1. Run `dictation.exe --setup`, clear **Start automatically when I log in**, and select **Save**. (Or remove the `DeepgramDictation` entry from Task Manager → **Startup apps**.)
+2. Quit with **Ctrl+Alt+Q**.
+3. Delete the folder with `dictation.exe`, `.env` and `dictation.log`.
 
 ## Troubleshooting
 
-**Nothing happens on Alt+M.** Make sure it's running (`scripts/Start Dictation.bat`). Run `scripts/Troubleshoot.bat` to see errors in a console.
+**Nothing happens on Alt+M.** Check in Task Manager that `dictation.exe` runs. If not, double-click it. Errors are in `dictation.log` next to the `.exe`.
 
-**"Key rejected".** The API key is wrong or expired — rerun `setup.bat` and paste a fresh one.
+**"Alt+M, Ctrl+Alt+Z or Ctrl+Alt+Q is already used by another app".** Another program registered the same hotkey. Quit it, then start the app again.
+
+**Alt+M no longer works in Word or Excel.** While the app runs, it captures Alt+M, so other apps do not get it (Word uses it for the Mailings tab, Excel for the Formulas tab).
+
+**"Key rejected - check your API key".** The key is wrong or expired. Run `dictation.exe --setup` and paste a new key.
 
 **"No connection to Deepgram".** Check your internet connection.
 
-**"Microphone unavailable".** Another app may be holding the mic, or Windows mic permissions are off (Settings → Privacy → Microphone).
+**"Microphone unavailable".** Another app may hold the microphone, or Windows does not allow microphone access (Settings → Privacy & security → Microphone).
 
-**It pastes into the wrong place.** The text is pasted wherever focus is when transcription finishes — click into the target field before pressing Alt+M the second time.
+**Text goes to the wrong place.** The text goes to the window that has focus. Click into the target field before you press Alt+M.
+
+## How it works
+
+`dictation.exe` is a small Rust program ([`rust/`](rust)). It registers its hotkeys with Windows (`RegisterHotKey`) and runs without a console window.
+
+On the first Alt+M, it opens the microphone, converts the audio to 16 kHz mono, and streams it to Deepgram over a WebSocket while you talk. Each final phrase is pasted at once (live paste): the app puts it on the clipboard and simulates Ctrl+V. When you press Alt+M again, it waits only for the last phrase. If the stream returns no text, the app uploads the whole recording instead (batch).
+
+The meter is a layered, click-through window. It never takes the focus and never intercepts a click.
+
+## Build from source
+
+See [rust/README.md](rust/README.md). In short, with [Rust](https://rustup.rs) installed:
+
+```bash
+cd rust
+cargo build --release
+```
+
+The benchmark that compares versions is in [`bench/`](bench).
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](.github/CONTRIBUTING.md). **macOS
-support is the most-wanted addition**, and there's a concrete roadmap for it
-there if you're on a Mac.
+Contributions are welcome. See [CONTRIBUTING.md](.github/CONTRIBUTING.md). **macOS support** is the most-wanted addition ([#1](https://github.com/rawasmhd/deepgram-dictation/issues/1)).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

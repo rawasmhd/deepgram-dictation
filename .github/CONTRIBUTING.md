@@ -1,74 +1,58 @@
 # Contributing
 
-Thanks for your interest — contributions are welcome, whether it's a bug fix, a
-new feature, or a whole new platform.
+Thanks for your interest. Contributions are welcome, whether it's a bug fix, a new feature, or a whole new platform.
 
 ## Getting set up
 
+Install [Rust](https://rustup.rs). Then:
+
 ```bash
 git clone https://github.com/rawasmhd/deepgram-dictation
-cd deepgram-dictation
-python -m pip install sounddevice numpy requests pynput pyperclip websocket-client
-python dictate.py            # runs with a visible console for debugging
+cd deepgram-dictation/rust
+cargo build          # debug build: runs with a console that shows the log
+cargo test
 ```
 
-The whole app is one file, `dictate.py`. The tunable behaviour lives in the
-constants at the top (hotkey, paste mode, overlay position, Deepgram params) —
-start there to get your bearings.
+Put your Deepgram key in a `.env` file in the repository root (`DEEPGRAM_API_KEY=...`). A build in `rust/target/` finds it there. See [rust/README.md](../rust/README.md) for the environment variables and the toolchain notes.
+
+The code is in `rust/src/`:
+
+| File | What it does |
+|---|---|
+| `main.rs` | Start, hotkeys, the record/stop flow, undo |
+| `audio.rs` | Microphone capture, converted to 16 kHz mono |
+| `deepgram.rs` | Streaming (WebSocket) and batch transcription |
+| `live.rs` | Live paste: what to paste, and when |
+| `paste.rs` | Clipboard and simulated keys |
+| `overlay.rs` | The floating meter |
+| `setup.rs`, `config.rs` | First-run setup window, `.env`, autostart |
+| `typing.rs` | Notices typing, to cancel undo |
+| `logging.rs` | `dictation.log` |
 
 ## Submitting changes
 
-1. Open an issue first, or find an existing one. Every change needs an issue
-   before work starts.
+1. Open an issue first, or find an existing one. Every change needs an issue before work starts.
 2. Fork the repo and create a branch off `main`.
-3. Keep changes focused; match the surrounding style (this codebase favours
-   small functions, plain constants, and cross-platform guards over clever
-   abstractions).
-4. Open a pull request describing what you changed and how you tested it, and
-   link the issue (for example `Closes #8`).
+3. Keep changes focused, and match the surrounding style: small functions, plain constants, and a short comment where the reason is not obvious.
+4. Run `cargo build` (no warnings) and `cargo test`.
+5. Open a pull request that says what you changed and how you tested it, and link the issue (for example `Closes #8`).
 
-Please don't commit secrets — `.env` is git-ignored for a reason.
+If a change can affect speed or reliability, run the benchmark in [`bench/`](../bench) before and after.
 
-## Help wanted: macOS support 🍎
+Please don't commit secrets. `.env` is git-ignored for a reason.
 
-This is the big one, and a great first contribution if you're on a Mac. The
-core stack (`sounddevice`, `requests`, `pynput`, `pyperclip`, `tkinter`) is all
-cross-platform, and the code already has some scaffolding for it —
-`IS_MAC` is detected and `PASTE_MODIFIER` already selects **Cmd** instead of
-Ctrl on macOS. But several Windows-specific pieces need a macOS path before it
-works end to end:
+## Help wanted: macOS support
 
-- **Hotkey detection.** `key_matches()` falls back to `vk == ord("M")`, which is
-  a *Windows* virtual-key code. On macOS the keycode differs and holding Option
-  turns `key.char` from `"m"` into `"µ"`, so **Alt+M never fires**. This needs
-  Mac-specific keycode handling (and possibly a different default hotkey, since
-  Option+letter types special characters).
+This is the big one ([#1](https://github.com/rawasmhd/deepgram-dictation/issues/1)). The audio capture (`cpal`) and the Deepgram code (`tungstenite`, `ureq`) are cross-platform already. These parts call Windows directly and need a macOS version:
 
-- **Permissions.** `pynput`'s global listener and its keystroke simulation both
-  require **Accessibility** + **Input Monitoring** grants in System Settings →
-  Privacy & Security, and the mic needs **Microphone** permission. Without them
-  the listener and auto-paste silently do nothing. At minimum this needs
-  documenting; ideally a first-run check that points the user to the right pane.
+- **Hotkeys** (`main.rs`): `RegisterHotKey`. macOS needs a global hotkey API (for example Carbon `RegisterEventHotKey`). Option+letter types special characters on a Mac, so the default hotkey may need to change.
+- **Paste and undo** (`paste.rs`): the clipboard and `SendInput`. macOS needs `NSPasteboard` and `CGEvent` with **Cmd**+V. Both need the **Accessibility** permission, and the app should point the user to it on the first start.
+- **Typing detection** (`typing.rs`): a low-level keyboard hook. macOS needs an event tap, which needs **Input Monitoring** permission.
+- **The meter** (`overlay.rs`): a layered Windows window drawn with GDI. macOS needs a borderless, non-activating, click-through `NSPanel`.
+- **Setup, autostart, single instance** (`setup.rs`, `config.rs`, `main.rs`): a Win32 window, the Run registry key and a named mutex. macOS needs a small window, a Login Item, and a lock file.
 
-- **The floating overlay.** `-transparentcolor` (used in `Overlay.__init__`) is
-  Windows/X11 only — unsupported on macOS Aqua — so the panel renders as a dark
-  square instead of a floating rounded meter. And `make_passthrough()` is
-  Windows-only, so on macOS the overlay may steal focus (which breaks
-  paste-at-cursor). macOS needs a different transparency approach
-  (`-transparent` / `-alpha`) and a way to keep the window non-activating.
-
-- **Setup & launch scripts.** The `.bat` files, `pythonw.exe`, the single-
-  instance mutex, and the Startup-folder autostart are all Windows-only. The
-  macOS equivalent would be a `setup.command` / start / stop shell script set,
-  running detached, and a `launchd` plist or Login Item for autostart.
-
-None of these change how the app works on Windows — please keep the Windows
-path intact and gate macOS behaviour behind `IS_MAC` (and Linux behind the
-same pattern if you're feeling ambitious). If you're picking this up, opening
-an issue first to coordinate is appreciated.
+Please keep the Windows code as it is, and put macOS code behind `#[cfg(target_os = "macos")]`. If you pick this up, comment on #1 first to coordinate.
 
 ## Reporting bugs
 
-Open an issue with your OS version, what you expected, what happened, and
-anything from `dictation.log` (next to `dictate.py`). Running
-`scripts/Troubleshoot.bat` shows errors in a visible console.
+Open an issue with your Windows version, what you expected, what happened, and the lines from `dictation.log` (next to `dictation.exe`) around the problem.

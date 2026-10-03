@@ -1,6 +1,6 @@
 # Rust rewrite
 
-This folder holds the Rust version of `dictate.py` (tracking issue #12). It is not complete yet.
+This folder holds the app: `dictation.exe`, written in Rust. It replaced the Python version (`dictate.py`) in #12. For users, see the [main README](../README.md).
 
 **Works now:**
 
@@ -13,7 +13,7 @@ This folder holds the Rust version of `dictate.py` (tracking issue #12). It is n
 
 - A setup window on the first start (or with `dictation.exe --setup`): it asks for the API key, checks it with Deepgram, saves it to `.env` next to the `.exe`, and can start the app at login.
 - A log file, `dictation.log`, next to the `.exe`.
-- Only one copy runs at a time, Python or Rust.
+- Only one copy runs at a time (also not next to an old Python copy).
 
 **Not done yet:** code signing (#19).
 
@@ -38,11 +38,11 @@ CI builds and tests `dictation.exe` on every push and pull request (`.github/wor
 The `.exe` is not code-signed yet (#19):
 
 - SmartScreen shows **"Windows protected your PC"**. Select **More info → Run anyway**.
-- With **Smart App Control** on, Windows blocks the app, and there is no way past it. Use the Python version until the `.exe` is signed.
+- With **Smart App Control** on, Windows blocks the app, and there is no way past it. The app can run on such a PC only after it is signed.
 
 ## Run
 
-Stop the Python version first (`scripts\Stop Dictation.bat`). Only one version runs at a time: the second one exits.
+Quit any running copy first (Ctrl+Alt+Q). Only one copy runs at a time: the second one exits.
 
 The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` file next to `dictation.exe` or in a folder above it. A build in `target\release` finds the `.env` in the repository root. If there is no key, the setup window opens. To change the key or the autostart later, run `dictation.exe --setup`.
 
@@ -61,7 +61,7 @@ The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` 
 | `DICTATION_LOG` | Write the log to this file instead of `dictation.log` next to the `.exe`. |
 | `DICTATION_FAKE_AUDIO` | A 16 kHz, mono, 16-bit WAV file that replaces the microphone (for the benchmark). |
 
-## Differences from dictate.py
+## Differences from the old Python version
 
 - The hotkeys use `RegisterHotKey`, so Alt+M no longer reaches the app that has focus. A small keyboard hook is still necessary for undo, but it only records *that* you typed, not which keys.
 - Before each Ctrl+V, the app waits until no other program has the clipboard open. Windows clipboard history can block a paste otherwise (#18).

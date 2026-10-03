@@ -98,7 +98,7 @@ fn update_level(block: &[i16]) {
     }
     let sum: f64 = block.iter().map(|&s| (s as f64 / 32768.0).powi(2)).sum();
     let rms = (sum / block.len() as f64).sqrt() as f32 + 1e-9;
-    // -60 dB reads as silence, -5 dB as full scale (same as dictate.py)
+    // -60 dB reads as silence, -5 dB as full scale
     let level = ((20.0 * rms.log10() + 60.0) / 55.0).clamp(0.0, 1.0);
     LEVEL.store(level.to_bits(), Ordering::Relaxed);
 }
