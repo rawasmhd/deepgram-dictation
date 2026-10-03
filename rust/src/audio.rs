@@ -69,6 +69,11 @@ impl Drop for Recording {
     }
 }
 
+/// True if there is a microphone (or the benchmark's WAV file replaces it).
+pub fn has_input_device() -> bool {
+    std::env::var_os(FAKE_AUDIO_ENV).is_some() || cpal::default_host().default_input_device().is_some()
+}
+
 /// Start recording. Each block of 16 kHz samples also goes to `sink`.
 pub fn start(sink: Option<Sender<Vec<i16>>>) -> Result<Recording, String> {
     let shared = Arc::new(Shared { samples: Mutex::new(Vec::new()), sink: Mutex::new(sink) });

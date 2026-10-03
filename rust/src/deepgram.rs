@@ -117,6 +117,17 @@ pub fn transcribe(key: &str, samples: &[i16]) -> Result<String, Error> {
     }
 }
 
+/// Check a key before it is saved: Deepgram answers 401 to a wrong key.
+pub fn check_key(key: &str) -> Result<(), Error> {
+    match agent()?.get(&format!("https://{HOST}/v1/projects")).set("Authorization", &format!("Token {key}")).call() {
+        Ok(_) => Ok(()),
+        Err(ureq::Error::Status(401, _)) => Err(Error::KeyRejected),
+        // a key without permission to list projects can still transcribe
+        Err(ureq::Error::Status(_, _)) => Ok(()),
+        Err(ureq::Error::Transport(t)) => Err(Error::Network(t.to_string())),
+    }
+}
+
 fn wav(samples: &[i16]) -> Vec<u8> {
     let data_len = (samples.len() * 2) as u32;
     let mut out = Vec::with_capacity(44 + data_len as usize);

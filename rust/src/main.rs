@@ -5,7 +5,7 @@
 //!   Ctrl+Alt+Z   delete the last dictation, if you have not typed since
 //!   Ctrl+Alt+Q   quit
 //!
-//! Not ported yet: setup and logging (#10).
+//! The first start, or `dictation.exe --setup`, asks for the API key.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -13,15 +13,16 @@ mod audio;
 mod config;
 mod deepgram;
 mod live;
+mod logging;
 mod overlay;
 mod paste;
+mod setup;
 mod typing;
 
-use std::io::Write;
 use std::{cell::RefCell, ptr, thread};
 
 use windows_sys::Win32::Foundation::*;
-use windows_sys::Win32::System::Threading::{CreateMutexW, OpenMutexW};
+use windows_sys::Win32::System::Threading::CreateMutexW;
 use windows_sys::Win32::UI::HiDpi::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
@@ -44,9 +45,8 @@ const CLIPBOARD_DELAY_MS: u32 = 500;
 const LIVE_CHECK_FRAMES: u32 = 8;
 const MIN_SECONDS: f32 = 0.4; // ignore accidental taps
 
-const PYTHON_MUTEX: &str = "DeepgramDictation_v1"; // created by dictate.py
-const OWN_MUTEX: &str = "DeepgramDictation_rs_prototype";
-const SYNCHRONIZE: u32 = 0x0010_0000;
+/// The same name as in dictate.py, so only one version runs at a time.
+const INSTANCE_MUTEX: &str = "DeepgramDictation_v1";
 
 type Transcript = Result<String, deepgram::Error>;
 
@@ -74,26 +74,45 @@ thread_local! {
 }
 
 fn main() {
-    unsafe {
-        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    logging::init();
 
-        let python = OpenMutexW(SYNCHRONIZE, 0, wide(PYTHON_MUTEX).as_ptr());
-        if !python.is_null() {
-            CloseHandle(python);
-            alert("The Python version is running.\n\nStop it first with scripts\\Stop Dictation.bat.");
-            return;
+    // setup: on the first start (no key), or when asked with --setup
+    let asked = std::env::args().any(|a| a == "--setup");
+    let mut key = config::api_key();
+    let mut did_setup = false;
+    if asked || key.is_none() {
+        match setup::run(key.is_none() || config::autostart_enabled()) {
+            Some(choice) => {
+                if let Err(e) = apply_setup(&choice) {
+                    alert(&format!("The setup could not be saved.\n\n{e}"));
+                    return;
+                }
+                key = Some(choice.key);
+                did_setup = true;
+            }
+            None if key.is_none() => return, // cancelled, and no key to run with
+            None => {}
         }
-        CreateMutexW(ptr::null(), 0, wide(OWN_MUTEX).as_ptr());
+    }
+    let Some(key) = key else { return };
+
+    // one copy at a time, Python or Rust: both use this mutex name
+    unsafe {
+        CreateMutexW(ptr::null(), 0, wide(INSTANCE_MUTEX).as_ptr());
         if GetLastError() == ERROR_ALREADY_EXISTS {
             log("already running, exiting");
+            if did_setup {
+                info("Saved.\n\nDictation is already running. To use the new key, quit it with Ctrl+Alt+Q and start it again.");
+            }
             return;
         }
     }
 
-    let Some(key) = config::api_key() else {
-        alert("No API key found.\n\nPut DEEPGRAM_API_KEY=... in a .env file next to dictation.exe.");
+    if !audio::has_input_device() {
+        alert("No microphone was found.\n\nConnect one, then start Deepgram Dictation again.");
         return;
-    };
+    }
 
     let hwnd = overlay::create_window(Some(wndproc));
     if hwnd.is_null() {
@@ -116,10 +135,13 @@ fn main() {
         log("keyboard hook unavailable; undo works even after typing");
     }
     log(&format!(
-        "--- started --- hotkey: ALT+M   undo: CTRL+ALT+Z   quit: CTRL+ALT+Q   mode: {}   live paste: {}",
+        "hotkey: ALT+M   undo: CTRL+ALT+Z   quit: CTRL+ALT+Q   mode: {}   live paste: {}",
         if config::streaming() { "streaming" } else { "batch" },
         if config::streaming() && config::live_paste() { "on" } else { "off" },
     ));
+    if did_setup {
+        info("Ready.\n\nPress Alt+M anywhere to dictate, and Alt+M again to paste the text.\nQuit with Ctrl+Alt+Q.");
+    }
 
     APP.with(|a| {
         *a.borrow_mut() = Some(App {
@@ -370,23 +392,30 @@ fn transcribe(key: &str, stream: Option<deepgram::Stream>, samples: &[i16]) -> T
     deepgram::transcribe(key, samples)
 }
 
-pub fn log(msg: &str) {
-    println!("{msg}");
-    if let Some(path) = config::log_file() {
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-            let _ = writeln!(f, "{msg}");
-        }
+pub use logging::log;
+
+/// Save the key and the autostart choice from the setup window.
+fn apply_setup(choice: &setup::Choice) -> Result<(), String> {
+    let path = config::save_api_key(&choice.key)?;
+    log(&format!("setup: key saved to {}", path.display()));
+    if config::set_autostart(choice.autostart)? {
+        log("setup: removed the Python version's Startup shortcut");
     }
+    log(&format!("setup: autostart {}", if choice.autostart { "on" } else { "off" }));
+    Ok(())
 }
 
 fn alert(msg: &str) {
+    message(msg, MB_ICONERROR);
+}
+
+fn info(msg: &str) {
+    message(msg, MB_ICONINFORMATION);
+}
+
+fn message(msg: &str, icon: MESSAGEBOX_STYLE) {
     log(msg);
     unsafe {
-        MessageBoxW(
-            ptr::null_mut(),
-            wide(msg).as_ptr(),
-            wide("Deepgram Dictation").as_ptr(),
-            MB_OK | MB_ICONERROR,
-        );
+        MessageBoxW(ptr::null_mut(), wide(msg).as_ptr(), wide("Deepgram Dictation").as_ptr(), MB_OK | icon);
     }
 }

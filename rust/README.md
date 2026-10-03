@@ -11,7 +11,11 @@ This folder holds the Rust version of `dictate.py` (tracking issue #12). It is n
 - Live paste (default): each phrase is pasted while you speak, only into the window that had focus at the start. In another window, the meter shows "Paused".
 - Undo with **Ctrl+Alt+Z**: deletes the last dictation, if you have not typed since and the same window has focus.
 
-**Not ported yet:** setup scripts and logging (#10), signed releases (#11).
+- A setup window on the first start (or with `dictation.exe --setup`): it asks for the API key, checks it with Deepgram, saves it to `.env` next to the `.exe`, and can start the app at login.
+- A log file, `dictation.log`, next to the `.exe`.
+- Only one copy runs at a time, Python or Rust.
+
+**Not done yet:** code signing (#19).
 
 ## Build
 
@@ -38,9 +42,9 @@ The `.exe` is not code-signed yet (#19):
 
 ## Run
 
-Stop the Python version first (`scripts\Stop Dictation.bat`). The Rust version does not start while the Python version runs.
+Stop the Python version first (`scripts\Stop Dictation.bat`). Only one version runs at a time: the second one exits.
 
-The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` file next to `dictation.exe` or in a folder above it. A build in `target\release` finds the `.env` in the repository root.
+The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` file next to `dictation.exe` or in a folder above it. A build in `target\release` finds the `.env` in the repository root. If there is no key, the setup window opens. To change the key or the autostart later, run `dictation.exe --setup`.
 
 1. Put the cursor in a text box.
 2. Press **Alt+M** and speak.
@@ -54,7 +58,7 @@ The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` 
 | `DEEPGRAM_API_KEY` | The API key. |
 | `DICTATION_MODE` | `batch` uploads the recording after you stop. Anything else, or not set: streaming. |
 | `DICTATION_LIVE_PASTE` | `0` pastes all the text when you stop. Not set: live paste (streaming only). |
-| `DICTATION_LOG` | A file that gets a copy of the log, with one `-> text` line per dictation. |
+| `DICTATION_LOG` | Write the log to this file instead of `dictation.log` next to the `.exe`. |
 | `DICTATION_FAKE_AUDIO` | A 16 kHz, mono, 16-bit WAV file that replaces the microphone (for the benchmark). |
 
 ## Differences from dictate.py
