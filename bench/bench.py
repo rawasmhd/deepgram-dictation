@@ -317,6 +317,9 @@ def wav_seconds():
         return w.getnframes() / w.getframerate()
 
 
+RUNNING = set()     # app processes started and not stopped yet
+
+
 def launch(args):
     env = dict(os.environ)
     if args.app == "python":
@@ -325,7 +328,9 @@ def launch(args):
     else:
         cmd = [str(Path(args.exe).resolve())]
         env["DICTATION_FAKE_AUDIO"] = str(SAMPLE_WAV)
-    return subprocess.Popen(cmd, cwd=str(ROOT), env=env)
+    proc = subprocess.Popen(cmd, cwd=str(ROOT), env=env)
+    RUNNING.add(proc)
+    return proc
 
 
 def wait_until_ready(proc, target):
@@ -503,6 +508,7 @@ def stop(proc):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+    RUNNING.discard(proc)
 
 
 def app_settings(args):
@@ -615,8 +621,15 @@ def main():
         finally:
             target.close()
 
-    threading.Thread(target=work, daemon=True).start()
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
     target.run()
+    if worker.is_alive():
+        # the target window was closed during the run (#21): the worker's
+        # cleanup will not run, so stop the app here and save nothing
+        for proc in list(RUNNING):
+            stop(proc)
+        sys.exit("benchmark interrupted: the target window was closed; no results saved")
     if errors:
         sys.exit(f"benchmark failed: {errors[0]}")
 
