@@ -37,6 +37,7 @@ const BAR_HIGH: Rgb = [125.0, 211.0, 252.0];
 const DOT_DIM: Rgb = [90.0, 40.0, 46.0];
 const REC_RED: Rgb = [240.0, 84.0, 84.0];
 const ERR_RED: Rgb = [255.0, 107.0, 107.0];
+const PAUSE_AMBER: Rgb = [245.0, 185.0, 66.0];
 
 pub enum State {
     Hidden,
@@ -51,6 +52,7 @@ pub struct Overlay {
     started: Instant,
     frame: u32,
     history: VecDeque<f32>,
+    paused: bool,
     gfx: Option<Gfx>,
     pos: POINT,
 }
@@ -114,9 +116,15 @@ impl Overlay {
             started: Instant::now(),
             frame: 0,
             history: VecDeque::from(vec![0.0; BARS]),
+            paused: false,
             gfx: None,
             pos: POINT { x: 0, y: 0 },
         }
+    }
+
+    /// Live paste is waiting for the focus to come back.
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
     }
 
     pub fn is_working(&self) -> bool {
@@ -128,6 +136,7 @@ impl Overlay {
         self.started = Instant::now();
         if matches!(state, State::Recording) {
             self.history = VecDeque::from(vec![0.0; BARS]);
+            self.paused = false;
         }
         let hidden = matches!(state, State::Hidden);
         self.state = state;
@@ -219,10 +228,15 @@ impl Overlay {
                     let colour = if lvl < 0.02 { BAR_IDLE } else { mix(BAR_LOW, BAR_HIGH, lvl) };
                     g.bar(i, h, colour);
                 }
-                let p = 0.5 + 0.5 * (self.frame as f32 / 6.0).sin();
-                g.circle(25.0 * s, cy * s, 5.0 * s, mix(DOT_DIM, REC_RED, p));
-                let secs = self.started.elapsed().as_secs();
-                texts.push((format!("{}:{:02}", secs / 60, secs % 60), W - 18.0, true, TEXT_DIM));
+                if self.paused {
+                    g.circle(25.0 * s, cy * s, 5.0 * s, PAUSE_AMBER);
+                    texts.push(("Paused".to_string(), W - 18.0, true, PAUSE_AMBER));
+                } else {
+                    let p = 0.5 + 0.5 * (self.frame as f32 / 6.0).sin();
+                    g.circle(25.0 * s, cy * s, 5.0 * s, mix(DOT_DIM, REC_RED, p));
+                    let secs = self.started.elapsed().as_secs();
+                    texts.push((format!("{}:{:02}", secs / 60, secs % 60), W - 18.0, true, TEXT_DIM));
+                }
             }
             State::Working => {
                 let vis = BARS - g.work_start;

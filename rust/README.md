@@ -8,8 +8,10 @@ This folder holds the Rust version of `dictate.py` (tracking issue #12). It is n
 - Deepgram streaming while you speak, with a batch fallback. Batch mode on request.
 - The floating meter, with the live microphone level and the "Transcribing" animation.
 - Paste at the cursor, and the text stays on the clipboard.
+- Live paste (default): each phrase is pasted while you speak, only into the window that had focus at the start. In another window, the meter shows "Paused".
+- Undo with **Ctrl+Alt+Z**: deletes the last dictation, if you have not typed since and the same window has focus.
 
-**Not ported yet:** live paste and undo (#9), setup scripts and logging (#10), signed releases (#11).
+**Not ported yet:** setup scripts and logging (#10), signed releases (#11).
 
 ## Build
 
@@ -42,11 +44,14 @@ The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` 
 |---|---|
 | `DEEPGRAM_API_KEY` | The API key. |
 | `DICTATION_MODE` | `batch` uploads the recording after you stop. Anything else, or not set: streaming. |
+| `DICTATION_LIVE_PASTE` | `0` pastes all the text when you stop. Not set: live paste (streaming only). |
 | `DICTATION_LOG` | A file that gets a copy of the log, with one `-> text` line per dictation. |
 | `DICTATION_FAKE_AUDIO` | A 16 kHz, mono, 16-bit WAV file that replaces the microphone (for the benchmark). |
 
 ## Differences from dictate.py
 
-- The hotkeys use `RegisterHotKey`, not a global keyboard hook. Alt+M no longer reaches the app that has focus. Antivirus tools are less likely to flag it.
+- The hotkeys use `RegisterHotKey`, so Alt+M no longer reaches the app that has focus. A small keyboard hook is still necessary for undo, but it only records *that* you typed, not which keys.
+- Before each Ctrl+V, the app waits until no other program has the clipboard open. Windows clipboard history can block a paste otherwise (#18).
+- After a live dictation, the full text goes to the clipboard 0.5 s after the last paste, so the target app pastes the last phrase, not the full text.
 - The meter uses per-pixel alpha, so the rounded corners are smooth.
 - The meter scales with the DPI of each monitor.

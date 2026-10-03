@@ -11,6 +11,12 @@ pub fn streaming() -> bool {
     std::env::var("DICTATION_MODE").map_or(true, |m| m != "batch")
 }
 
+/// Streaming only: paste each phrase while you speak (default, like
+/// dictate.py). DICTATION_LIVE_PASTE=0 pastes all the text when you stop.
+pub fn live_paste() -> bool {
+    std::env::var("DICTATION_LIVE_PASTE").map_or(true, |v| !matches!(v.as_str(), "0" | "false"))
+}
+
 /// DEEPGRAM_API_KEY from the environment, or from the first .env file
 /// next to the .exe or in a folder above it (so a build in
 /// rust/target/release finds the repo's .env).

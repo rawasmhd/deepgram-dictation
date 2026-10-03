@@ -144,38 +144,57 @@ fn wav(samples: &[i16]) -> Vec<u8> {
 /// arrives. When every sender is dropped, the session asks Deepgram to
 /// finish, and `finish()` returns the text.
 pub struct Stream {
-    finals: Arc<Mutex<Vec<String>>>,
+    transcript: Transcript,
     done: Receiver<()>,
+}
+
+/// The final text so far, readable while the session runs.
+#[derive(Clone, Default)]
+pub struct Transcript(Arc<Mutex<Vec<String>>>);
+
+impl Transcript {
+    pub fn text(&self) -> String {
+        format_transcript(self.0.lock().unwrap().join(" ").trim())
+    }
 }
 
 impl Stream {
     /// Connects in the background. Audio is buffered until the socket opens.
-    pub fn start(key: String) -> (Stream, Sender<Vec<i16>>) {
+    /// `on_final` runs on the network thread after each final phrase.
+    pub fn start(key: String, on_final: impl Fn() + Send + 'static) -> (Stream, Sender<Vec<i16>>) {
         let (audio_tx, audio_rx) = mpsc::channel();
         let (done_tx, done) = mpsc::channel();
-        let finals = Arc::new(Mutex::new(Vec::new()));
-        let shared = finals.clone();
+        let transcript = Transcript::default();
+        let shared = transcript.clone();
         thread::spawn(move || {
-            if let Err(e) = run(&key, audio_rx, &shared) {
+            if let Err(e) = run(&key, audio_rx, &shared, &on_final) {
                 log(&format!("streaming error: {e}"));
             }
             let _ = done_tx.send(());
         });
-        (Stream { finals, done }, audio_tx)
+        (Stream { transcript, done }, audio_tx)
+    }
+
+    pub fn transcript(&self) -> Transcript {
+        self.transcript.clone()
     }
 
     /// Wait for the last results (the audio must have ended), then return
     /// all the final text. Empty if the connection failed.
     pub fn finish(self) -> String {
         let _ = self.done.recv_timeout(CONNECT_TIMEOUT + FINISH_TIMEOUT);
-        let finals = self.finals.lock().unwrap();
-        format_transcript(finals.join(" ").trim())
+        self.transcript.text()
     }
 }
 
 type Socket = tungstenite::WebSocket<MaybeTlsStream<TcpStream>>;
 
-fn run(key: &str, audio: Receiver<Vec<i16>>, finals: &Mutex<Vec<String>>) -> Result<(), String> {
+fn run(
+    key: &str,
+    audio: Receiver<Vec<i16>>,
+    transcript: &Transcript,
+    on_final: &dyn Fn(),
+) -> Result<(), String> {
     let mut socket = connect(key)?;
     let mut closing: Option<Instant> = None;
 
@@ -209,7 +228,8 @@ fn run(key: &str, audio: Receiver<Vec<i16>>, finals: &Mutex<Vec<String>>) -> Res
             match socket.read() {
                 Ok(Message::Text(text)) => {
                     if let Some(final_text) = final_transcript(&text) {
-                        finals.lock().unwrap().push(final_text);
+                        transcript.0.lock().unwrap().push(final_text);
+                        on_final();
                     }
                 }
                 Ok(Message::Close(_)) => return Ok(()),

@@ -2,17 +2,20 @@
 //!
 //!   Alt+M        start dictating
 //!   Alt+M        stop, transcribe, paste at the cursor
+//!   Ctrl+Alt+Z   delete the last dictation, if you have not typed since
 //!   Ctrl+Alt+Q   quit
 //!
-//! Not ported yet: live paste and undo (#9), setup and logging (#10).
+//! Not ported yet: setup and logging (#10).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
 mod config;
 mod deepgram;
+mod live;
 mod overlay;
 mod paste;
+mod typing;
 
 use std::io::Write;
 use std::{cell::RefCell, ptr, thread};
@@ -23,12 +26,22 @@ use windows_sys::Win32::UI::HiDpi::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
+use live::LivePaste;
 use overlay::{wide, Overlay, State, TIMER_FRAME};
 
 const HOTKEY_TOGGLE: i32 = 1;
 const HOTKEY_QUIT: i32 = 2;
+const HOTKEY_UNDO: i32 = 3;
 /// Posted by the worker thread when the transcript is ready.
 const WM_TRANSCRIPT: u32 = WM_APP + 1;
+/// Posted by the network thread when a new final phrase arrived.
+const WM_LIVE_TEXT: u32 = WM_APP + 2;
+/// Puts the full text on the clipboard after the last live paste.
+const TIMER_CLIPBOARD: usize = 3;
+/// Let the target app read the clipboard for the last Ctrl+V first.
+const CLIPBOARD_DELAY_MS: u32 = 500;
+/// Also check live paste this often (frames), to see if the focus came back.
+const LIVE_CHECK_FRAMES: u32 = 8;
 const MIN_SECONDS: f32 = 0.4; // ignore accidental taps
 
 const PYTHON_MUTEX: &str = "DeepgramDictation_v1"; // created by dictate.py
@@ -37,12 +50,23 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 
 type Transcript = Result<String, deepgram::Error>;
 
+/// The last dictation, for undo: how many characters, and where.
+struct Delivery {
+    chars: usize,
+    window: HWND,
+}
+
 struct App {
     hwnd: HWND,
     key: String,
     overlay: Overlay,
     recording: Option<audio::Recording>,
     stream: Option<deepgram::Stream>,
+    transcript: Option<deepgram::Transcript>,
+    live: Option<LivePaste>,
+    last: Option<Delivery>,
+    clipboard_later: Option<String>,
+    frames: u32,
 }
 
 thread_local! {
@@ -80,15 +104,21 @@ fn main() {
     unsafe {
         let ok = RegisterHotKey(hwnd, HOTKEY_TOGGLE, MOD_ALT | MOD_NOREPEAT, u32::from(b'M')) != 0
             && RegisterHotKey(hwnd, HOTKEY_QUIT, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, u32::from(b'Q'))
+                != 0
+            && RegisterHotKey(hwnd, HOTKEY_UNDO, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, u32::from(b'Z'))
                 != 0;
         if !ok {
-            alert("Alt+M or Ctrl+Alt+Q is already used by another app.");
+            alert("Alt+M, Ctrl+Alt+Z or Ctrl+Alt+Q is already used by another app.");
             return;
         }
     }
+    if !typing::install() {
+        log("keyboard hook unavailable; undo works even after typing");
+    }
     log(&format!(
-        "--- started --- hotkey: ALT+M   quit: CTRL+ALT+Q   mode: {}",
-        if config::streaming() { "streaming" } else { "batch" }
+        "--- started --- hotkey: ALT+M   undo: CTRL+ALT+Z   quit: CTRL+ALT+Q   mode: {}   live paste: {}",
+        if config::streaming() { "streaming" } else { "batch" },
+        if config::streaming() && config::live_paste() { "on" } else { "off" },
     ));
 
     APP.with(|a| {
@@ -98,6 +128,11 @@ fn main() {
             overlay: Overlay::new(hwnd),
             recording: None,
             stream: None,
+            transcript: None,
+            live: None,
+            last: None,
+            clipboard_later: None,
+            frames: 0,
         })
     });
 
@@ -121,6 +156,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             with_app(|app| app.on_timer(wp));
             0
         }
+        WM_LIVE_TEXT => {
+            with_app(|app| app.live_step());
+            0
+        }
         WM_TRANSCRIPT => {
             // the worker thread gave up ownership of this box
             let result = *Box::from_raw(lp as *mut Transcript);
@@ -142,6 +181,10 @@ fn with_app(f: impl FnOnce(&mut App)) {
     });
 }
 
+fn foreground() -> HWND {
+    unsafe { GetForegroundWindow() }
+}
+
 impl App {
     fn on_hotkey(&mut self, id: i32) {
         match id {
@@ -155,13 +198,18 @@ impl App {
                 None => self.start(),
                 Some(recording) => self.stop(recording),
             },
+            HOTKEY_UNDO if self.recording.is_none() && !self.overlay.is_working() => self.undo(),
             _ => {}
         }
     }
 
     fn start(&mut self) {
+        self.last = None;
         let (stream, sink) = if config::streaming() {
-            let (stream, sink) = deepgram::Stream::start(self.key.clone());
+            let hwnd = self.hwnd as isize;
+            let (stream, sink) = deepgram::Stream::start(self.key.clone(), move || unsafe {
+                PostMessageW(hwnd as HWND, WM_LIVE_TEXT, 0, 0);
+            });
             (Some(stream), Some(sink))
         } else {
             (None, None)
@@ -169,6 +217,8 @@ impl App {
         match audio::start(sink) {
             Ok(recording) => {
                 self.recording = Some(recording);
+                self.transcript = stream.as_ref().map(|s| s.transcript());
+                self.live = (stream.is_some() && config::live_paste()).then(|| LivePaste::new(foreground()));
                 self.stream = stream;
                 self.overlay.set_state(State::Recording);
             }
@@ -183,8 +233,10 @@ impl App {
         // stopping closes the audio channel, so the stream starts to finish
         let samples = recording.stop();
         let stream = self.stream.take();
+        self.transcript = None;
         let seconds = samples.len() as f32 / audio::SAMPLE_RATE as f32;
         if seconds < MIN_SECONDS {
+            self.live = None;
             self.overlay.set_state(State::Hidden);
             return;
         }
@@ -204,7 +256,28 @@ impl App {
         });
     }
 
+    /// A new phrase arrived, or a periodic check: paste what is new.
+    fn live_step(&mut self) {
+        let (Some(live), Some(transcript)) = (self.live.as_mut(), self.transcript.as_ref()) else {
+            return;
+        };
+        let hwnd = self.hwnd;
+        let focused = foreground() == live.window;
+        if let Some(paused) = live.step(&transcript.text(), focused, |t| paste::paste(hwnd, t)) {
+            self.overlay.set_paused(paused);
+        }
+    }
+
     fn on_transcript(&mut self, result: Transcript) {
+        // some text is already in the document: finish what streaming produced
+        if let Some(mut live) = self.live.take().filter(|l| !l.pasted.is_empty()) {
+            let text = result.unwrap_or_else(|_| live.pasted.clone());
+            let hwnd = self.hwnd;
+            live.step(&text, foreground() == live.window, |t| paste::paste(hwnd, t));
+            self.finish_live(live, text);
+            return;
+        }
+
         match result {
             Ok(text) if text.is_empty() => {
                 self.overlay.set_state(State::Notice { text: "No speech detected".into(), error: true });
@@ -212,7 +285,10 @@ impl App {
             Ok(text) => {
                 log(&format!("-> {text}"));
                 self.overlay.set_state(State::Hidden);
-                if !paste::paste(self.hwnd, &text) {
+                let window = foreground();
+                if paste::paste(self.hwnd, &text) {
+                    self.remember(text.chars().count(), window);
+                } else {
                     self.overlay.set_state(State::Notice { text: "Clipboard busy".into(), error: true });
                 }
             }
@@ -223,9 +299,60 @@ impl App {
         }
     }
 
+    /// Wrap up a dictation that was pasted while the user spoke.
+    fn finish_live(&mut self, live: LivePaste, text: String) {
+        log(&format!("-> {text}"));
+        self.remember(live.pasted.chars().count(), live.window);
+        // the clipboard gets all of it, not the last phrase - but only after
+        // the target app has read the clipboard for the last Ctrl+V
+        self.clipboard_later = Some(text.clone());
+        unsafe { SetTimer(self.hwnd, TIMER_CLIPBOARD, CLIPBOARD_DELAY_MS, None) };
+        if live.complete(&text) {
+            self.overlay.set_state(State::Hidden);
+        } else {
+            // stopped in another window: the rest is on the clipboard
+            self.overlay.set_state(State::Notice { text: "Window changed - text copied".into(), error: false });
+        }
+    }
+
+    fn remember(&mut self, chars: usize, window: HWND) {
+        self.last = (chars > 0).then_some(Delivery { chars, window });
+        typing::reset();
+    }
+
+    /// Delete the last dictation with Backspace. Only while the cursor is
+    /// still at its end: in the same window, with no typing since.
+    fn undo(&mut self) {
+        let Some(last) = self.last.take() else { return };
+        if typing::typed_since_reset() {
+            log("undo skipped: you typed after the dictation");
+            return;
+        }
+        if foreground() != last.window {
+            log("undo skipped: a different window has focus");
+            self.last = Some(last);
+            return;
+        }
+        paste::backspaces(last.chars);
+        log(&format!("undo: deleted {} characters", last.chars));
+    }
+
     fn on_timer(&mut self, id: usize) {
-        if id == TIMER_FRAME {
-            self.overlay.tick(audio::level());
+        match id {
+            TIMER_FRAME => {
+                self.overlay.tick(audio::level());
+                self.frames = self.frames.wrapping_add(1);
+                if self.recording.is_some() && self.frames % LIVE_CHECK_FRAMES == 0 {
+                    self.live_step();
+                }
+            }
+            TIMER_CLIPBOARD => {
+                unsafe { KillTimer(self.hwnd, TIMER_CLIPBOARD) };
+                if let Some(text) = self.clipboard_later.take() {
+                    paste::set_clipboard(self.hwnd, &text);
+                }
+            }
+            _ => {}
         }
     }
 }
