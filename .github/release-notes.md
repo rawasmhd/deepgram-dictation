@@ -5,6 +5,8 @@
 3. Double-click it. A setup window asks for your Deepgram API key (from [console.deepgram.com](https://console.deepgram.com)) and can start the app at login.
 4. Press **Alt+M** anywhere to dictate.
 
+The app shows a microphone icon in the notification area (select **^** on the taskbar if you do not see it). Right-click it for the settings, start at login, the log file and quit.
+
 Upgrading from the Python version: see "Upgrading from the Python version" in the [README](https://github.com/rawasmhd/deepgram-dictation#upgrading-from-the-python-version).
 
 ## Windows security prompts
