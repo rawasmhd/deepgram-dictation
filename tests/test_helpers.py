@@ -121,3 +121,97 @@ def test_streaming_ignores_malformed_messages():
     s._on_message(None, "not json")
     s._on_message(None, _msg("ok", True))
     assert s.transcript() == "ok"
+
+
+def test_streaming_calls_on_final_for_finals_only():
+    calls = []
+    s = dictate.StreamingSession("key", on_final=lambda: calls.append(1))
+    s._on_message(None, _msg("hello", False))
+    s._on_message(None, _msg("hello", True))
+    assert calls == [1]
+
+
+# ---- LivePaster ------------------------------------------------------------
+
+def _live(monkeypatch, window="A"):
+    """A LivePaster over a real session, with paste and focus faked."""
+    focus = {"window": window}
+    pasted = []
+    monkeypatch.setattr(dictate, "foreground_window", lambda: focus["window"])
+    monkeypatch.setattr(dictate, "paste", pasted.append)
+    session = dictate.StreamingSession("key")
+    return dictate.LivePaster(session), session, focus, pasted
+
+
+def test_live_paste_sends_only_new_text(monkeypatch):
+    paster, session, _, pasted = _live(monkeypatch)
+    session._on_message(None, _msg("hello", True))
+    paster._step()
+    session._on_message(None, _msg("there", True))
+    paster._step()
+    paster._step()                              # nothing new -> no paste
+    assert pasted == ["hello", " there"]
+    assert paster.finish() is True
+
+
+def test_live_paste_waits_while_another_window_has_focus(monkeypatch):
+    paster, session, focus, pasted = _live(monkeypatch)
+    session._on_message(None, _msg("one", True))
+    paster._step()
+    focus["window"] = "B"
+    session._on_message(None, _msg("two", True))
+    paster._step()
+    assert pasted == ["one"] and paster.paused
+    focus["window"] = "A"
+    paster._step()
+    assert pasted == ["one", " two"] and not paster.paused
+
+
+def test_live_paste_finish_reports_text_left_behind(monkeypatch):
+    paster, session, focus, pasted = _live(monkeypatch)
+    session._on_message(None, _msg("one", True))
+    paster._step()
+    focus["window"] = "B"
+    session._on_message(None, _msg("two", True))
+    assert paster.finish() is False
+    assert paster.pasted == "one"
+
+
+# ---- undo ------------------------------------------------------------------
+
+def test_undo_sends_one_backspace_per_character(monkeypatch):
+    sent = []
+    monkeypatch.setattr(dictate, "foreground_window", lambda: "A")
+    monkeypatch.setattr(dictate, "_send_keys", sent.append)
+    dictate.remember_delivery("hi\nyou", "A")
+    dictate.undo_last()
+    assert len(sent) == 1 and dictate._last_delivery is None
+
+    class Kbd:
+        presses = 0
+
+        def press(self, key):
+            Kbd.presses += 1
+
+        def release(self, key):
+            pass
+    sent[0](Kbd())
+    assert Kbd.presses == 6
+
+
+def test_undo_skipped_in_another_window(monkeypatch):
+    sent = []
+    monkeypatch.setattr(dictate, "foreground_window", lambda: "B")
+    monkeypatch.setattr(dictate, "_send_keys", sent.append)
+    dictate.remember_delivery("hello", "A")
+    dictate.undo_last()
+    assert sent == [] and dictate._last_delivery is not None
+    dictate.forget_delivery()
+
+
+def test_typing_cancels_undo(monkeypatch):
+    monkeypatch.setattr(dictate, "_synthetic_until", 0.0)
+    dictate.remember_delivery("hello", "A")
+    dictate.on_press(FakeKey(char="x", vk=ord("X")))
+    dictate.on_release(FakeKey(char="x", vk=ord("X")))
+    assert dictate._last_delivery is None

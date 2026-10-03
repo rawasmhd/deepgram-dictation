@@ -18,11 +18,14 @@ start there to get your bearings.
 
 ## Submitting changes
 
-1. Fork the repo and create a branch off `main`.
-2. Keep changes focused; match the surrounding style (this codebase favours
+1. Open an issue first, or find an existing one. Every change needs an issue
+   before work starts.
+2. Fork the repo and create a branch off `main`.
+3. Keep changes focused; match the surrounding style (this codebase favours
    small functions, plain constants, and cross-platform guards over clever
    abstractions).
-3. Open a pull request describing what you changed and how you tested it.
+4. Open a pull request describing what you changed and how you tested it, and
+   link the issue (for example `Closes #8`).
 
 Please don't commit secrets — `.env` is git-ignored for a reason.
 

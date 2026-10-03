@@ -1,0 +1,1 @@
+﻿This is a benchmark for the dictation app. It measures how long it takes, from the moment you stop speaking, until the text appears at the cursor.

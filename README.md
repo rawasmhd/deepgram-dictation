@@ -13,6 +13,7 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription; nothing is sto
 ## Features
 
 - **Alt+M** to start, **Alt+M** to stop, transcribe, and paste
+- **Ctrl+Alt+Z** to delete the last dictation (if you have not typed since)
 - **Ctrl+Alt+Q** to quit
 - Works in any application — the text is pasted wherever your cursor is
 - **Low latency** — streams audio to Deepgram live as you talk, so the text lands almost the moment you stop (switchable to batch mode)
@@ -80,6 +81,8 @@ The knobs are constants at the top of `dictate.py`:
 | `TRANSCRIBE_MODE` | `"streaming"` | `streaming` (live, low-latency) or `batch` (upload after you stop) |
 | `HOTKEY_MODIFIERS` / `HOTKEY_CHAR` | `{"alt"}` / `"m"` | The start/stop hotkey |
 | `AUTO_PASTE` | `True` | `False` = copy to clipboard only, don't paste |
+| `LIVE_PASTE` | `True` | Streaming only: paste each phrase while you speak. Text goes only into the window that had focus when you started; if you switch away, the meter shows "Paused" and the text waits until you come back. If you stop in another window, the full text is copied instead of pasted |
+| `UNDO_MODIFIERS` / `UNDO_CHAR` | `{"ctrl", "alt"}` / `"z"` | Hotkey that deletes the last dictation with Backspace. Any key you press after a dictation cancels it; mouse clicks do not, so do not click elsewhere in the text first |
 | `RESTORE_CLIPBOARD` | `False` | Put your previous clipboard back after pasting (off by default, so the dictation stays on the clipboard) |
 | `BEEP` | `False` | Short tones on start / stop / done / error |
 | `MIN_SECONDS` | `0.4` | Ignore taps shorter than this |

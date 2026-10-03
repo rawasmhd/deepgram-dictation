@@ -19,3 +19,6 @@ RawBrain/
 
 # Rust build output
 rust/target/
+
+# Benchmark log
+bench/bench.log
