@@ -13,6 +13,7 @@ use tungstenite::Message;
 
 use crate::audio::SAMPLE_RATE;
 use crate::log;
+use crate::words;
 
 const HOST: &str = "api.deepgram.com";
 
@@ -42,6 +43,8 @@ const FINISH_TIMEOUT: Duration = Duration::from_secs(3);
 #[derive(Debug)]
 pub enum Error {
     KeyRejected,
+    /// The custom words list is too long (more than 500 tokens).
+    KeytermsRejected,
     Api(u16),
     Network(String),
 }
@@ -51,6 +54,7 @@ impl Error {
     pub fn message(&self) -> String {
         match self {
             Error::KeyRejected => "Key rejected - check your API key".into(),
+            Error::KeytermsRejected => "Custom words list too long".into(),
             Error::Api(code) => format!("Deepgram error {code}"),
             Error::Network(_) => "No connection to Deepgram".into(),
         }
@@ -61,6 +65,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Error::KeyRejected => write!(f, "Deepgram rejected the API key (401)"),
+            Error::KeytermsRejected => write!(f, "Deepgram rejected the custom words (keyterm limit)"),
             Error::Api(code) => write!(f, "Deepgram returned HTTP {code}"),
             Error::Network(detail) => write!(f, "network: {detail}"),
         }
@@ -72,8 +77,16 @@ pub fn format_transcript(text: &str) -> String {
     text.replace(r"<\n\n>", "\n\n").replace(r"<\n>", "\n")
 }
 
-fn query(extra: &[(&str, &str)]) -> String {
-    PARAMS.iter().chain(extra).map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&")
+/// The query string: our settings, then one keyterm parameter per term.
+fn query(extra: &[(&str, &str)], terms: &[String]) -> String {
+    let params = PARAMS.iter().chain(extra).map(|(k, v)| format!("{k}={v}"));
+    let terms = terms.iter().map(|t| format!("keyterm={}", words::url_encode(t)));
+    params.chain(terms).collect::<Vec<_>>().join("&")
+}
+
+/// A 400 that names the key terms: the list is too long.
+fn keyterm_error(code: u16, body: &str) -> bool {
+    code == 400 && body.to_ascii_lowercase().contains("keyterm")
 }
 
 fn tls() -> Result<native_tls::TlsConnector, Error> {
@@ -92,8 +105,8 @@ fn agent() -> Result<&'static ureq::Agent, Error> {
     Ok(AGENT.get_or_init(|| agent))
 }
 
-pub fn transcribe(key: &str, samples: &[i16]) -> Result<String, Error> {
-    let url = format!("https://{HOST}/v1/listen?{}", query(&[]));
+pub fn transcribe(key: &str, samples: &[i16], terms: &[String]) -> Result<String, Error> {
+    let url = format!("https://{HOST}/v1/listen?{}", query(&[], terms));
     let response = agent()?
         .post(&url)
         .set("Authorization", &format!("Token {key}"))
@@ -110,6 +123,9 @@ pub fn transcribe(key: &str, samples: &[i16]) -> Result<String, Error> {
         Err(ureq::Error::Status(code, r)) => {
             let body = r.into_string().unwrap_or_default();
             log(&format!("Deepgram {code}: {}", body.chars().take(200).collect::<String>()));
+            if keyterm_error(code, &body) {
+                return Err(Error::KeytermsRejected);
+            }
             Err(Error::Api(code))
         }
         Err(ureq::Error::Transport(t)) => Err(Error::Network(t.to_string())),
@@ -171,13 +187,17 @@ impl Transcript {
 impl Stream {
     /// Connects in the background. Audio is buffered until the socket opens.
     /// `on_final` runs on the network thread after each final phrase.
-    pub fn start(key: String, on_final: impl Fn() + Send + 'static) -> (Stream, Sender<Vec<i16>>) {
+    pub fn start(
+        key: String,
+        terms: Vec<String>,
+        on_final: impl Fn() + Send + 'static,
+    ) -> (Stream, Sender<Vec<i16>>) {
         let (audio_tx, audio_rx) = mpsc::channel();
         let (done_tx, done) = mpsc::channel();
         let transcript = Transcript::default();
         let shared = transcript.clone();
         thread::spawn(move || {
-            if let Err(e) = run(&key, audio_rx, &shared, &on_final) {
+            if let Err(e) = run(&key, &terms, audio_rx, &shared, &on_final) {
                 log(&format!("streaming error: {e}"));
             }
             let _ = done_tx.send(());
@@ -201,11 +221,20 @@ type Socket = tungstenite::WebSocket<MaybeTlsStream<TcpStream>>;
 
 fn run(
     key: &str,
+    terms: &[String],
     audio: Receiver<Vec<i16>>,
     transcript: &Transcript,
     on_final: &dyn Fn(),
 ) -> Result<(), String> {
-    let mut socket = connect(key)?;
+    let mut socket = match connect(key, terms) {
+        // the audio waits in the channel, so nothing is lost
+        Err(Error::KeytermsRejected) => {
+            words::reject(terms);
+            connect(key, &[])
+        }
+        other => other,
+    }
+    .map_err(|e| e.to_string())?;
     let mut closing: Option<Instant> = None;
 
     loop {
@@ -264,24 +293,32 @@ fn run(
     }
 }
 
-fn connect(key: &str) -> Result<Socket, String> {
-    let url = format!("wss://{HOST}/v1/listen?{}", query(STREAM_PARAMS));
-    let mut request = url.into_client_request().map_err(|e| e.to_string())?;
+fn connect(key: &str, terms: &[String]) -> Result<Socket, Error> {
+    let net = |e: &dyn std::fmt::Display| Error::Network(e.to_string());
+    let url = format!("wss://{HOST}/v1/listen?{}", query(STREAM_PARAMS, terms));
+    let mut request = url.into_client_request().map_err(|e| net(&e))?;
     request
         .headers_mut()
-        .insert("Authorization", format!("Token {key}").parse().map_err(|_| "bad API key")?);
+        .insert("Authorization", format!("Token {key}").parse().map_err(|_| net(&"bad API key"))?);
 
-    let addr = (HOST, 443).to_socket_addrs().map_err(|e| e.to_string())?.next().ok_or("no address")?;
-    let tcp = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT).map_err(|e| e.to_string())?;
-    tcp.set_nodelay(true).map_err(|e| e.to_string())?;
-    let tls = tls().map_err(|e| format!("{e:?}"))?;
-    let connector = tungstenite::Connector::NativeTls(tls);
+    let addr = (HOST, 443).to_socket_addrs().map_err(|e| net(&e))?.next().ok_or_else(|| net(&"no address"))?;
+    let tcp = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT).map_err(|e| net(&e))?;
+    tcp.set_nodelay(true).map_err(|e| net(&e))?;
+    let connector = tungstenite::Connector::NativeTls(tls()?);
     let (socket, _) = tungstenite::client_tls_with_config(request, tcp, None, Some(connector))
         .map_err(|e| match e {
-            tungstenite::HandshakeError::Failure(tungstenite::Error::Http(r)) if r.status() == 401 => {
-                "key rejected (401)".to_string()
+            tungstenite::HandshakeError::Failure(tungstenite::Error::Http(r)) => {
+                let code = r.status().as_u16();
+                let header = r.headers().get("dg-error").and_then(|v| v.to_str().ok()).unwrap_or("");
+                let body = r.body().as_deref().map(String::from_utf8_lossy).unwrap_or_default();
+                log(&format!("Deepgram {code}: {header} {}", body.chars().take(200).collect::<String>()));
+                match code {
+                    401 => Error::KeyRejected,
+                    _ if keyterm_error(code, &format!("{header} {body}")) => Error::KeytermsRejected,
+                    _ => Error::Api(code),
+                }
             }
-            other => other.to_string(),
+            other => net(&other),
         })?;
 
     // from here on, poll: send audio and read results in one loop
@@ -290,7 +327,7 @@ fn connect(key: &str) -> Result<Socket, String> {
         MaybeTlsStream::Plain(s) => s.set_nonblocking(true),
         _ => Ok(()),
     }
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| net(&e))?;
     Ok(socket)
 }
 
@@ -347,8 +384,40 @@ mod tests {
 
     #[test]
     fn query_has_the_expected_params() {
-        let q = query(STREAM_PARAMS);
+        let q = query(STREAM_PARAMS, &[]);
         assert!(q.starts_with("model=nova-3&language=en&"));
         assert!(q.ends_with("interim_results=false"));
+    }
+
+    #[test]
+    fn query_has_one_keyterm_per_term() {
+        let terms = ["Rawas".to_string(), "GitHub Actions".to_string()];
+        let q = query(&[], &terms);
+        assert!(q.ends_with("filler_words=false&keyterm=Rawas&keyterm=GitHub%20Actions"));
+        assert!(!query(&[], &[]).contains("keyterm"));
+    }
+
+    #[test]
+    fn keyterm_limit_error_is_recognized() {
+        // the text Deepgram returned in a test on 2026-10-06
+        let body = r#"{"err_code":"Bad Request","err_msg":"Bad Request: Keyterm limit exceeded. The maximum number of tokens across all keyterms is 500."}"#;
+        assert!(keyterm_error(400, body));
+        assert!(!keyterm_error(400, r#"{"err_msg":"Bad Request: unknown model"}"#));
+        assert!(!keyterm_error(500, body));
+    }
+
+    /// Calls Deepgram (costs a little). Run with a key:
+    /// DEEPGRAM_API_KEY=... cargo test -- --ignored live_keyterms
+    #[test]
+    #[ignore]
+    fn live_keyterms() {
+        let key = std::env::var("DEEPGRAM_API_KEY").expect("set DEEPGRAM_API_KEY");
+        let silence = vec![0i16; 16_000];
+        let few = vec!["Rawas".to_string(), "GitHub Actions".to_string()];
+        let many: Vec<String> = (0..300).map(|i| format!("Zyxquar Plimbet Vorshnik{i}")).collect();
+        assert!(transcribe(&key, &silence, &few).is_ok());
+        assert!(matches!(transcribe(&key, &silence, &many), Err(Error::KeytermsRejected)));
+        assert!(connect(&key, &few).is_ok());
+        assert!(matches!(connect(&key, &many), Err(Error::KeytermsRejected)));
     }
 }

@@ -24,6 +24,7 @@ mod setup;
 mod theme;
 mod tray;
 mod typing;
+mod words;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::{cell::RefCell, ptr, thread};
@@ -79,6 +80,8 @@ struct App {
     recording: Option<audio::Recording>,
     stream: Option<deepgram::Stream>,
     transcript: Option<deepgram::Transcript>,
+    /// The custom words for the current dictation.
+    terms: Vec<String>,
     live: Option<LivePaste>,
     last: Option<Delivery>,
     clipboard_later: Option<String>,
@@ -172,6 +175,7 @@ fn main() {
             recording: None,
             stream: None,
             transcript: None,
+            terms: Vec::new(),
             live: None,
             last: None,
             clipboard_later: None,
@@ -332,9 +336,10 @@ impl App {
 
     fn start(&mut self) {
         self.last = None;
+        self.terms = words::active();
         let (stream, sink) = if config::streaming() {
             let hwnd = self.hwnd as isize;
-            let (stream, sink) = deepgram::Stream::start(self.key.clone(), move || unsafe {
+            let (stream, sink) = deepgram::Stream::start(self.key.clone(), self.terms.clone(), move || unsafe {
                 PostMessageW(hwnd as HWND, WM_LIVE_TEXT, 0, 0);
             });
             (Some(stream), Some(sink))
@@ -371,9 +376,10 @@ impl App {
 
         // wait for Deepgram off the UI thread, so the meter keeps moving
         let key = self.key.clone();
+        let terms = std::mem::take(&mut self.terms);
         let hwnd = self.hwnd as isize;
         thread::spawn(move || {
-            let result = transcribe(&key, stream, &samples);
+            let result = transcribe(&key, stream, &samples, &terms);
             let boxed = Box::into_raw(Box::new(result)) as isize;
             unsafe {
                 if PostMessageW(hwnd as HWND, WM_TRANSCRIPT, 0, boxed) == 0 {
@@ -396,6 +402,9 @@ impl App {
     }
 
     fn on_transcript(&mut self, result: Transcript) {
+        if words::take_notice() {
+            self.tray.balloon("Custom words not used", "Your custom words list is too long. Remove some words from words.txt.");
+        }
         // some text is already in the document: finish what streaming produced
         if let Some(mut live) = self.live.take().filter(|l| !l.pasted.is_empty()) {
             let text = result.unwrap_or_else(|_| live.pasted.clone());
@@ -486,15 +495,27 @@ impl App {
 
 /// Streaming text if there is any, else a batch upload of the recording
 /// (for example when the socket never connected).
-fn transcribe(key: &str, stream: Option<deepgram::Stream>, samples: &[i16]) -> Transcript {
+fn transcribe(key: &str, stream: Option<deepgram::Stream>, samples: &[i16], terms: &[String]) -> Transcript {
+    // streaming drops a rejected list itself; then batch must not send it
+    let mut terms = terms;
     if let Some(stream) = stream {
         let text = stream.finish();
         if !text.is_empty() {
             return Ok(text);
         }
         log("streaming produced no text; trying batch fallback");
+        if words::is_rejected(terms) {
+            terms = &[];
+        }
     }
-    deepgram::transcribe(key, samples)
+    match deepgram::transcribe(key, samples, terms) {
+        // the same audio again, without the custom words
+        Err(deepgram::Error::KeytermsRejected) => {
+            words::reject(terms);
+            deepgram::transcribe(key, samples, &[])
+        }
+        other => other,
+    }
 }
 
 pub use logging::log;
