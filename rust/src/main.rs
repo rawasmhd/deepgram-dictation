@@ -25,6 +25,7 @@ mod theme;
 mod tray;
 mod typing;
 mod words;
+mod words_window;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::{cell::RefCell, ptr, thread};
@@ -96,6 +97,12 @@ thread_local! {
 fn main() {
     unsafe { SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     logging::init();
+
+    // only the Custom words window, without the app
+    if std::env::args().any(|a| a == "--words") {
+        words_window::open();
+        return;
+    }
 
     // setup: on the first start (no key), or when asked with --setup
     let asked = std::env::args().any(|a| a == "--setup");
@@ -262,6 +269,7 @@ fn on_tray_menu(hwnd: HWND) {
             with_app(|app| app.on_hotkey(HOTKEY_TOGGLE));
         }
         Some(tray::CMD_SETTINGS) => open_settings(),
+        Some(tray::CMD_WORDS) => words_window::open(),
         Some(tray::CMD_AUTOSTART) => {
             let on = !config::autostart_enabled();
             match config::set_autostart(on) {

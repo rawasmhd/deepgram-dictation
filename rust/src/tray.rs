@@ -22,6 +22,7 @@ pub const CMD_SETTINGS: usize = 11;
 pub const CMD_AUTOSTART: usize = 12;
 pub const CMD_LOG: usize = 13;
 pub const CMD_QUIT: usize = 14;
+pub const CMD_WORDS: usize = 15;
 
 pub struct Tray {
     hwnd: HWND,
@@ -150,6 +151,7 @@ pub fn menu(hwnd: HWND, state: &MenuState) -> Option<usize> {
         item(MF_STRING | if state.busy { MF_GRAYED } else { 0 }, CMD_TOGGLE, toggle);
         item(MF_SEPARATOR, 0, "");
         item(MF_STRING, CMD_SETTINGS, "Settings…");
+        item(MF_STRING, CMD_WORDS, "Custom words…");
         item(MF_STRING | if state.autostart { MF_CHECKED } else { 0 }, CMD_AUTOSTART, "Start at login");
         item(MF_STRING, CMD_LOG, "Open log file");
         item(MF_SEPARATOR, 0, "");
