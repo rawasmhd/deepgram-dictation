@@ -12,7 +12,7 @@ WER (word error rate) is the share of words the model gets wrong. Lower is bette
 | Model | Deepgram `nova-3`, cloud API |
 | Mode | Streaming over WebSocket (default). Batch upload is the fallback. |
 | Language | `en` (can change in `PARAMS`) |
-| Options we use | `smart_format`, `punctuate`, `dictation`, `filler_words=false` |
+| Options we use | `smart_format`, `punctuate`, `dictation`, `filler_words=false`, `keyterm` (from `words.txt`, if it exists) |
 | Cost | $0.0077/min streaming, $0.0043/min batch |
 | Needs | Internet and a Deepgram API key |
 

@@ -69,6 +69,25 @@ Two environment variables change how it transcribes:
 | `DICTATION_MODE` | streaming | `batch` uploads the recording after you stop. This is simpler, but the wait grows with how long you spoke. |
 | `DICTATION_LIVE_PASTE` | on | `0` pastes all the text when you stop, not phrase by phrase. |
 
+### Custom words
+
+Deepgram can spell names, product names and other rare words wrong. To fix this, make a file `words.txt` next to `dictation.exe`, with one word or phrase on each line:
+
+```
+# lines that start with # are ignored
+Rawas
+GitHub Actions
+Dr. Smith
+```
+
+- Write each term the way you want to see it. Deepgram keeps the case, for example `GitHub`.
+- The app reads the file at the start of each dictation, so you do not need to restart it.
+- Add only words that Deepgram gets wrong. 20 to 50 terms work best.
+- Deepgram allows about 500 tokens of custom words. If the list is too long, the app tells you once and dictates without the list until you change the file.
+- Custom words cost extra: Deepgram adds $0.0013 per minute. With no `words.txt`, the app sends no custom words.
+
+More detail: [docs/keyterm-prompting.md](docs/keyterm-prompting.md).
+
 The language (`en`) and the model (`nova-3`) are set in [`rust/src/deepgram.rs`](rust/src/deepgram.rs). To dictate in another language, change `"language"` there and build the app again (see [Deepgram's language list](https://developers.deepgram.com/docs/models-languages-overview)).
 
 ## Upgrading from the Python version
