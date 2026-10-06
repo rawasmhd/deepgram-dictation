@@ -88,7 +88,8 @@ We do not need this. Our app opens a new connection for each dictation, so it ca
 Deepgram does not say how it counts tokens. A token is a part of a word. A short common word is about one token. A rare name can be several tokens. For #37:
 
 - Show a warning before the list gets near the limit.
-- If Deepgram returns an error because the list is too long, write it to the log and dictate again without key terms. Do not lose the user's speech.
+- If Deepgram returns an error because the list is too long, send the audio again without key terms. Do not lose the user's speech.
+- The list stays the same, so every later dictation would fail too. Tell the user once, and send no key terms until `words.txt` changes.
 
 ## Best practices
 
@@ -127,7 +128,7 @@ We think the add-on is charged only for requests that include `keyterm`. Deepgra
 - Use `keyterm`, not `keywords` (#37).
 - Send the list in the URL of each request, streaming and batch.
 - Keep the case from `words.txt`.
-- Handle the 500 token error without losing the dictation.
+- Handle the 500 token error without losing the dictation. Do not repeat a request that failed for each dictation (#37).
 - In the window (#38), show a count and a warning near the limit. Suggest 20 to 50 terms.
 
 ## Sources
