@@ -41,8 +41,8 @@ const DC_HASDEFID: usize = 0x534B;
 const BULLET: usize = 0x25CF;
 
 // DWM window attributes (Windows 10 2004 and later; older ones ignore them)
-const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
-const DWMWA_CAPTION_COLOR: u32 = 35;
+pub(crate) const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
+pub(crate) const DWMWA_CAPTION_COLOR: u32 = 35;
 
 // Layout in logical pixels (96 dpi).
 const W: f32 = 460.0;
@@ -63,27 +63,27 @@ pub struct Choice {
     pub autostart: bool,
 }
 
-struct Palette {
-    bg: Rgb,
-    card: Rgb,
-    card_edge: Rgb,
-    text: Rgb,
-    sub: Rgb,
-    input: Rgb,
-    input_edge: Rgb,
-    input_line: Rgb,
-    footer: Rgb,
-    footer_edge: Rgb,
-    accent: Rgb,
-    accent_edge: Rgb,
-    on_accent: Rgb,
-    button: Rgb,
-    button_edge: Rgb,
-    link: Rgb,
-    error: Rgb,
+pub(crate) struct Palette {
+    pub(crate) bg: Rgb,
+    pub(crate) card: Rgb,
+    pub(crate) card_edge: Rgb,
+    pub(crate) text: Rgb,
+    pub(crate) sub: Rgb,
+    pub(crate) input: Rgb,
+    pub(crate) input_edge: Rgb,
+    pub(crate) input_line: Rgb,
+    pub(crate) footer: Rgb,
+    pub(crate) footer_edge: Rgb,
+    pub(crate) accent: Rgb,
+    pub(crate) accent_edge: Rgb,
+    pub(crate) on_accent: Rgb,
+    pub(crate) button: Rgb,
+    pub(crate) button_edge: Rgb,
+    pub(crate) link: Rgb,
+    pub(crate) error: Rgb,
 }
 
-const LIGHT: Palette = Palette {
+pub(crate) const LIGHT: Palette = Palette {
     bg: hex(0xF3F3F3),
     card: hex(0xFBFBFB),
     card_edge: hex(0xE5E5E5),
@@ -103,7 +103,7 @@ const LIGHT: Palette = Palette {
     error: hex(0xC42B1C),
 };
 
-const DARK: Palette = Palette {
+pub(crate) const DARK: Palette = Palette {
     bg: hex(0x202020),
     card: hex(0x2B2B2B),
     card_edge: hex(0x383838),
@@ -644,13 +644,13 @@ unsafe fn draw_item(ui: &Ui, item: &DRAWITEMSTRUCT) {
 }
 
 /// A rounded rectangle with a `edge`-wide border.
-fn framed(c: &mut Canvas, r: [f32; 4], radius: f32, edge: f32, edge_colour: Rgb, fill: Rgb) {
+pub(crate) fn framed(c: &mut Canvas, r: [f32; 4], radius: f32, edge: f32, edge_colour: Rgb, fill: Rgb) {
     let edge = edge.max(1.0);
     c.paint(r, |x, y| round_rect(x, y, r[0], r[1], r[2], r[3], radius), edge_colour, 1.0);
     c.paint(r, |x, y| round_rect(x, y, r[0] + edge, r[1] + edge, r[2] - edge, r[3] - edge, radius - edge), fill, 1.0);
 }
 
-unsafe fn blit(dc: HDC, x: i32, y: i32, c: &Canvas) {
+pub(crate) unsafe fn blit(dc: HDC, x: i32, y: i32, c: &Canvas) {
     let mut bmi: BITMAPINFO = mem::zeroed();
     bmi.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
     bmi.bmiHeader.biWidth = c.w as i32;
@@ -662,7 +662,7 @@ unsafe fn blit(dc: HDC, x: i32, y: i32, c: &Canvas) {
     SetDIBitsToDevice(dc, x, y, c.w as u32, c.h as u32, 0, 0, 0, c.h as u32, px.as_ptr().cast(), &bmi, DIB_RGB_COLORS);
 }
 
-unsafe fn text(dc: HDC, font: HFONT, colour: Rgb, x: i32, y: i32, s: &str) {
+pub(crate) unsafe fn text(dc: HDC, font: HFONT, colour: Rgb, x: i32, y: i32, s: &str) {
     let old = SelectObject(dc, font);
     SetTextColor(dc, cref(colour));
     let w: Vec<u16> = s.encode_utf16().collect();
@@ -670,7 +670,7 @@ unsafe fn text(dc: HDC, font: HFONT, colour: Rgb, x: i32, y: i32, s: &str) {
     SelectObject(dc, old);
 }
 
-unsafe fn measure(hwnd: HWND, font: HFONT, s: &str) -> i32 {
+pub(crate) unsafe fn measure(hwnd: HWND, font: HFONT, s: &str) -> i32 {
     let dc = GetDC(hwnd);
     let old = SelectObject(dc, font);
     let w: Vec<u16> = s.encode_utf16().collect();
@@ -686,6 +686,6 @@ fn rect_px(ui: &Ui, r: [f32; 4]) -> RECT {
 }
 
 /// A colour as a GDI COLORREF (0x00BBGGRR).
-fn cref(c: Rgb) -> u32 {
+pub(crate) fn cref(c: Rgb) -> u32 {
     gfx::byte(c[2]) << 16 | gfx::byte(c[1]) << 8 | gfx::byte(c[0])
 }

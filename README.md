@@ -58,6 +58,7 @@ More:
 - **Ctrl+Alt+Z** deletes the last dictation with Backspace. It works only in the same window and if you have not typed since. A mouse click does not cancel it, so do not click somewhere else in the text first.
 - To start the app again after Ctrl+Alt+Q, double-click `dictation.exe`.
 - To change the API key or the start at login, select the tray icon, then **Settings…**. You can also run `dictation.exe --setup`.
+- To add names and rare words that Deepgram should recognize, select the tray icon, then **Custom words…**. See [Custom words](#custom-words).
 - The tray menu can also start and stop a dictation. The text goes into the window you used last.
 
 ## Settings
@@ -71,7 +72,18 @@ Two environment variables change how it transcribes:
 
 ### Custom words
 
-Deepgram can spell names, product names and other rare words wrong. To fix this, make a file `words.txt` next to `dictation.exe`, with one word or phrase on each line:
+Deepgram can spell names, product names and other rare words wrong. To fix this, give it a list of custom words.
+
+To edit the list, select the tray icon, then **Custom words…**. You can also run `dictation.exe --words`.
+
+<img src="assets/custom-words.png" alt="The Custom words window: a text field with an Add button, a list of words, a Remove button, a word count, and Save and Cancel" width="420">
+
+- Type a word or phrase, then press **Enter** or select **Add**.
+- To remove a word, select it, then press **Delete** or select **Remove**.
+- Select **Save**. The new list is used from the next dictation.
+- A yellow warning shows when the list is almost full, and a red one when it is too long.
+
+The window saves the list to `words.txt` next to `dictation.exe`. You can also edit this file in a text editor, with one word or phrase on each line:
 
 ```
 # lines that start with # are ignored
