@@ -10,9 +10,10 @@ This folder holds the app: `dictation.exe`, written in Rust. It replaced the Pyt
 - Paste at the cursor, and the text stays on the clipboard.
 - Live paste (default): each phrase is pasted while you speak, only into the window that had focus at the start. In another window, the meter shows "Paused".
 - Undo with **Ctrl+Alt+Z**: deletes the last dictation, if you have not typed since and the same window has focus.
+- Custom words: names and rare words from `words.txt` next to the `.exe`, sent to Deepgram as key terms. The **Custom words…** window (tray menu, or `dictation.exe --words`) edits the list. See [docs/keyterm-prompting.md](../docs/keyterm-prompting.md).
 
 - A setup window on the first start (or with `dictation.exe --setup`): it asks for the API key, checks it with Deepgram, saves it to `.env` next to the `.exe`, and can start the app at login.
-- A tray icon with the state and a menu: start or stop, Settings…, Start at login, Open log file, Quit.
+- A tray icon with the state and a menu: start or stop, Settings…, Custom words…, Start at login, Open log file, Quit.
 - The app icon (in the `.exe`, the windows and the tray), drawn from code in `src/art.rs`. `build.rs` puts it into the `.exe` with the version resource and the manifest (MSVC builds only).
 - Light and dark mode, from the Windows setting.
 - A log file, `dictation.log`, next to the `.exe`.
@@ -47,7 +48,7 @@ The `.exe` is not code-signed yet (#19):
 
 Quit any running copy first (Ctrl+Alt+Q). Only one copy runs at a time: the second one exits.
 
-The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` file next to `dictation.exe` or in a folder above it. A build in `target\release` finds the `.env` in the repository root. If there is no key, the setup window opens. To change the key or the autostart later, run `dictation.exe --setup`.
+The app reads `DEEPGRAM_API_KEY` from the environment, or from the first `.env` file next to `dictation.exe` or in a folder above it. A build in `target\release` finds the `.env` in the repository root. If there is no key, the setup window opens. To change the key or the autostart later, run `dictation.exe --setup`. To edit the custom words, run `dictation.exe --words`, or select **Custom words…** in the tray menu.
 
 1. Put the cursor in a text box.
 2. Press **Alt+M** and speak.
