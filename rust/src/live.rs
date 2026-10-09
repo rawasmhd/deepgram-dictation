@@ -7,9 +7,9 @@
 use windows_sys::Win32::Foundation::HWND;
 
 pub struct LivePaste {
-    pub window: HWND,
+    window: HWND,
     /// The part of the transcript that is already pasted.
-    pub pasted: String,
+    pasted: String,
     paused: bool,
     broken: bool,
 }
@@ -41,6 +41,21 @@ impl LivePaste {
             self.paused = paused;
             paused
         })
+    }
+
+    /// The window that had focus at the start.
+    pub fn window(&self) -> HWND {
+        self.window
+    }
+
+    /// The part of the transcript that is already pasted.
+    pub fn pasted_text(&self) -> &str {
+        &self.pasted
+    }
+
+    /// The number of characters already pasted.
+    pub fn pasted_chars(&self) -> usize {
+        self.pasted.chars().count()
     }
 
     /// True if all of `text` is in the start window.
@@ -85,16 +100,16 @@ mod tests {
         lp.step("one", true, |_| true);
         lp.step("one two", false, |_| true);
         assert!(!lp.complete("one two"));
-        assert_eq!(lp.pasted, "one");
+        assert_eq!(lp.pasted_text(), "one");
     }
 
     #[test]
     fn retries_a_failed_paste() {
         let mut lp = live();
         lp.step("one", true, |_| false);
-        assert_eq!(lp.pasted, "");
+        assert_eq!(lp.pasted_text(), "");
         lp.step("one", true, |_| true);
-        assert_eq!(lp.pasted, "one");
+        assert_eq!(lp.pasted_text(), "one");
     }
 
     #[test]
