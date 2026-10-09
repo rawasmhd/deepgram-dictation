@@ -7,7 +7,7 @@ Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+
 Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores no audio.
 
 <p align="center">
-  <img src="assets/meter-demo.gif" alt="The floating meter: live level bars and a timer while recording, then a Transcribing scan animation" width="420">
+  <img src="assets/meter-demo.gif" alt="The floating meter: a red dot, live level bars and a timer while recording, then a Transcribing scan animation" width="460">
 </p>
 
 ## Features
@@ -22,6 +22,7 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores
 - Follows the Windows light or dark mode
 - Keeps your dictation on the clipboard, so nothing is lost if no text box had focus
 - Smart formatting and spoken punctuation ("comma", "new paragraph") with Deepgram's `nova-3`
+- **Custom words**: a list of names and rare words that Deepgram should recognize, with a small window to edit it (see [Custom words](#custom-words))
 - **One small file**: `dictation.exe` is about 1 MB, needs no Python or other runtime, and uses about 15 MB of memory
 
 ## Install
@@ -33,6 +34,8 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores
    - Paste your API key. The app checks it with Deepgram before it saves it.
    - Keep **Start when I sign in to Windows** on, if you want it at every login.
    - Select **Save**.
+
+<img src="assets/settings.png" alt="The Settings window: a field for the Deepgram API key with a Show key button, a switch Start when I sign in to Windows, and Cancel and Save buttons" width="420">
 
 That's it. Press **Alt+M** anywhere to dictate.
 
@@ -60,6 +63,16 @@ More:
 - To change the API key or the start at login, select the tray icon, then **Settings…**. You can also run `dictation.exe --setup`.
 - To add names and rare words that Deepgram should recognize, select the tray icon, then **Custom words…**. See [Custom words](#custom-words).
 - The tray menu can also start and stop a dictation. The text goes into the window you used last.
+
+The meter while another window has focus:
+
+<p align="center">
+  <img src="assets/meter-paused.png" alt="The meter with an amber pause icon on the left and the word Paused on the right" width="460">
+</p>
+
+The tray menu:
+
+<img src="assets/tray-menu.png" alt="The tray menu: Start dictation (Alt+M), Settings, Custom words, Start at login, Open log file, Quit (Ctrl+Alt+Q)" width="360">
 
 ## Settings
 
@@ -141,6 +154,8 @@ The Python version is still in the Git history, in the commits before #23.
 `dictation.exe` is a small Rust program ([`rust/`](rust)). It registers its hotkeys with Windows (`RegisterHotKey`) and runs without a console window.
 
 On the first Alt+M, it opens the microphone, converts the audio to 16 kHz mono, and streams it to Deepgram over a WebSocket while you talk. Each final phrase is pasted at once (live paste): the app puts it on the clipboard and simulates Ctrl+V. When you press Alt+M again, it waits only for the last phrase. If the stream returns no text, the app uploads the whole recording instead (batch).
+
+If `words.txt` exists next to the `.exe`, the app reads it at the start of each dictation and sends each line as a key term (`keyterm`) with the request. Deepgram then recognizes these names and rare words. See [Custom words](#custom-words).
 
 The meter is a layered, click-through window. It never takes the focus and never intercepts a click.
 
