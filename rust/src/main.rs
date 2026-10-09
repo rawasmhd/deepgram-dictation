@@ -403,7 +403,7 @@ impl App {
             return;
         };
         let hwnd = self.hwnd;
-        let focused = foreground() == live.window;
+        let focused = foreground() == live.window();
         if let Some(paused) = live.step(&transcript.text(), focused, |t| paste::paste(hwnd, t)) {
             self.overlay.set_paused(paused);
         }
@@ -414,10 +414,10 @@ impl App {
             self.tray.balloon("Custom words not used", "Your custom words list is too long. Remove some words from words.txt.");
         }
         // some text is already in the document: finish what streaming produced
-        if let Some(mut live) = self.live.take().filter(|l| !l.pasted.is_empty()) {
-            let text = result.unwrap_or_else(|_| live.pasted.clone());
+        if let Some(mut live) = self.live.take().filter(|l| l.pasted_chars() > 0) {
+            let text = result.unwrap_or_else(|_| live.pasted_text().to_string());
             let hwnd = self.hwnd;
-            live.step(&text, foreground() == live.window, |t| paste::paste(hwnd, t));
+            live.step(&text, foreground() == live.window(), |t| paste::paste(hwnd, t));
             self.finish_live(live, text);
             return;
         }
@@ -446,7 +446,7 @@ impl App {
     /// Wrap up a dictation that was pasted while the user spoke.
     fn finish_live(&mut self, live: LivePaste, text: String) {
         log(&format!("-> {text}"));
-        self.remember(live.pasted.chars().count(), live.window);
+        self.remember(live.pasted_chars(), live.window());
         // the clipboard gets all of it, not the last phrase - but only after
         // the target app has read the clipboard for the last Ctrl+V
         self.clipboard_later = Some(text.clone());
