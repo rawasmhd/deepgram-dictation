@@ -132,6 +132,46 @@ pub fn transcribe(key: &str, samples: &[i16], terms: &[String]) -> Result<String
     }
 }
 
+/// The text of a recording: streaming text if there is any, else a batch
+/// upload (for example when the socket never connected), else a batch upload
+/// without the custom words when Deepgram rejects them.
+pub fn finish(key: &str, stream: Option<Stream>, samples: &[i16], terms: &[String]) -> Result<String, Error> {
+    let streamed = stream.map(Stream::finish);
+    // read after the stream ends: streaming drops a rejected list itself
+    let rejected = words::is_rejected(terms);
+    fallback(streamed, terms, rejected, |t| transcribe(key, samples, t), words::reject)
+}
+
+/// The rules of `finish`, without the network. `streamed` is the streaming
+/// text (None without a stream), `rejected` is true when Deepgram already
+/// rejected `terms`, and `reject` records a list that batch got rejected.
+fn fallback(
+    streamed: Option<String>,
+    terms: &[String],
+    rejected: bool,
+    mut batch: impl FnMut(&[String]) -> Result<String, Error>,
+    reject: impl FnOnce(&[String]),
+) -> Result<String, Error> {
+    let mut terms = terms;
+    if let Some(text) = streamed {
+        if !text.is_empty() {
+            return Ok(text);
+        }
+        log("streaming produced no text; trying batch fallback");
+        if rejected {
+            terms = &[];
+        }
+    }
+    match batch(terms) {
+        // the same audio again, without the custom words
+        Err(Error::KeytermsRejected) => {
+            reject(terms);
+            batch(&[])
+        }
+        other => other,
+    }
+}
+
 /// Check a key before it is saved: Deepgram answers 401 to a wrong key.
 pub fn check_key(key: &str) -> Result<(), Error> {
     match agent()?.get(&format!("https://{HOST}/v1/projects")).set("Authorization", &format!("Token {key}")).call() {
@@ -404,6 +444,76 @@ mod tests {
         assert!(keyterm_error(400, body));
         assert!(!keyterm_error(400, r#"{"err_msg":"Bad Request: unknown model"}"#));
         assert!(!keyterm_error(500, body));
+    }
+
+    fn terms() -> Vec<String> {
+        vec!["Rawas".to_string()]
+    }
+
+    #[test]
+    fn stream_text_wins() {
+        let mut calls = 0;
+        let batch = |_: &[String]| {
+            calls += 1;
+            Ok("batch".into())
+        };
+        let result = fallback(Some("hello".into()), &terms(), false, batch, |_| panic!());
+        assert_eq!(result.unwrap(), "hello");
+        assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn empty_stream_then_batch() {
+        let mut sent = Vec::new();
+        let batch = |t: &[String]| {
+            sent.push(t.to_vec());
+            Ok("batch".to_string())
+        };
+        let result = fallback(Some(String::new()), &terms(), false, batch, |_| panic!());
+        assert_eq!(result.unwrap(), "batch");
+        assert_eq!(sent, [terms()]);
+    }
+
+    #[test]
+    fn no_stream_then_batch() {
+        let result = fallback(None, &terms(), false, |_| Ok("batch".into()), |_| panic!());
+        assert_eq!(result.unwrap(), "batch");
+    }
+
+    #[test]
+    fn keyterms_rejected_then_batch_without_terms() {
+        let mut sent = Vec::new();
+        let mut rejected = Vec::new();
+        let batch = |t: &[String]| {
+            sent.push(t.to_vec());
+            if t.is_empty() {
+                Ok("batch".to_string())
+            } else {
+                Err(Error::KeytermsRejected)
+            }
+        };
+        let result = fallback(None, &terms(), false, batch, |t| rejected = t.to_vec());
+        assert_eq!(result.unwrap(), "batch");
+        assert_eq!(sent, [terms(), vec![]]);
+        assert_eq!(rejected, terms());
+    }
+
+    #[test]
+    fn rejected_list_is_not_sent_to_batch() {
+        let mut sent = Vec::new();
+        let batch = |t: &[String]| {
+            sent.push(t.to_vec());
+            Ok("batch".to_string())
+        };
+        let result = fallback(Some(String::new()), &terms(), true, batch, |_| panic!());
+        assert_eq!(result.unwrap(), "batch");
+        assert_eq!(sent, [Vec::<String>::new()]);
+    }
+
+    #[test]
+    fn other_batch_errors_are_returned() {
+        let result = fallback(None, &terms(), false, |_| Err(Error::KeyRejected), |_| panic!());
+        assert!(matches!(result, Err(Error::KeyRejected)));
     }
 
     /// Calls Deepgram (costs a little). Run with a key:
