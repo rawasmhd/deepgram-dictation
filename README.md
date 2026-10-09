@@ -132,6 +132,8 @@ The Python version is still in the Git history, in the commits before #23.
 
 **"Microphone unavailable".** Another app may hold the microphone, or Windows does not allow microphone access (Settings → Privacy & security → Microphone).
 
+**The app stopped after an update of another app (for example Claude).** If you started `dictation.exe` from a terminal or a session inside another app, Windows counts it as part of that app, and closes it when that app updates itself. The log then says `closed by Windows: an app update`. Start the app from Explorer instead: double-click `dictation.exe`, or run `explorer.exe C:\path	o\dictation.exe` from the terminal.
+
 **Text goes to the wrong place.** The text goes to the window that has focus. Click into the target field before you press Alt+M.
 
 ## How it works

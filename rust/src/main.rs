@@ -191,6 +191,8 @@ fn main() {
         })
     });
 
+    register_restart();
+
     unsafe {
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, ptr::null_mut(), 0, 0) > 0 {
@@ -198,9 +200,45 @@ fn main() {
             DispatchMessageW(&msg);
         }
     }
-    // removes the tray icon
-    APP.with(|a| a.borrow_mut().take());
-    log("stopped");
+    quit();
+}
+
+/// Drop the app state, which removes the tray icon. Safe to call twice:
+/// Windows can end the process right after WM_ENDSESSION, before the
+/// message loop returns.
+fn quit() {
+    if APP.with(|a| a.borrow_mut().take()).is_some() {
+        log("stopped");
+    }
+}
+
+/// Windows closes the app: the user signs out, or Restart Manager closes
+/// it for an update. The second case happens when the app was started
+/// from inside another app, for example a Claude Code session, and that
+/// app updates itself (#47). Quit cleanly, so Windows does not kill the
+/// process and report a hang.
+fn on_end_session(lp: LPARAM) {
+    let why = if lp as u32 & ENDSESSION_CLOSEAPP != 0 { "an app update (Restart Manager)" } else { "sign out or shutdown" };
+    log(&format!("closed by Windows: {why}"));
+    with_app(|app| app.on_hotkey(HOTKEY_QUIT));
+    quit();
+}
+
+/// Ask Restart Manager to start the app again after it closed it for an
+/// update (#47). Not after a crash, a hang, or a reboot: the autostart
+/// entry covers the reboot.
+fn register_restart() {
+    const RESTART_NO_CRASH: u32 = 1;
+    const RESTART_NO_HANG: u32 = 2;
+    const RESTART_NO_REBOOT: u32 = 8;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn RegisterApplicationRestart(command_line: *const u16, flags: u32) -> i32;
+    }
+    let hr = unsafe { RegisterApplicationRestart(ptr::null(), RESTART_NO_CRASH | RESTART_NO_HANG | RESTART_NO_REBOOT) };
+    if hr < 0 {
+        log(&format!("restart after an update not registered: 0x{hr:08x}"));
+    }
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -234,6 +272,14 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             // light or dark mode may have changed
             with_app(|app| app.tray.theme_changed());
             DefWindowProcW(hwnd, msg, wp, lp)
+        }
+        // DefWindowProc answers WM_QUERYENDSESSION with "yes"; this is the
+        // confirmation that the session, or the app, ends now
+        WM_ENDSESSION => {
+            if wp != 0 {
+                on_end_session(lp);
+            }
+            0
         }
         m if m == TASKBAR_CREATED.load(Ordering::Relaxed) => {
             with_app(|app| app.tray.add_again());
