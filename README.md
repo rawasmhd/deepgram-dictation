@@ -7,7 +7,7 @@ Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+
 Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores no audio.
 
 <p align="center">
-  <img src="assets/meter-demo.gif" alt="The floating meter: a red dot, live level bars and a timer while recording, then a Transcribing scan animation" width="460">
+  <img src="assets/meter.gif" alt="The floating meter: a red dot, live level bars and a timer while recording, then a Transcribing scan animation" width="460">
 </p>
 
 ## Features
