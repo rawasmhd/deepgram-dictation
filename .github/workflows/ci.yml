@@ -12,10 +12,10 @@ jobs:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -30,7 +30,7 @@ jobs:
         run: cargo test --locked
 
       - name: Upload dictation.exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dictation-exe
           path: rust/target/release/dictation.exe
@@ -39,9 +39,9 @@ jobs:
     # the benchmark needs a desktop and a Deepgram key, so CI only compiles it
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
