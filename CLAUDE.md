@@ -27,7 +27,7 @@ If a merge still shows a conflict, the agent that merges second resolves it on i
 
 ## Rule: start the app through Explorer
 
-Start `dictation.exe` with `explorer.exe C:\Dictationust	argetelease\dictation.exe`. Never with `Start-Process`, `start`, `cargo run`, or `&` from a shell in a Claude Code session.
+Start `dictation.exe` with `explorer.exe C:\Dictation\rust\target\release\dictation.exe`. Never with `Start-Process`, `start`, `cargo run`, or `&` from a shell in a Claude Code session.
 
 A process started from a shell in the Claude desktop app is part of that app's process tree. When the Claude app updates itself, Windows closes the whole tree, and the app stops (#47). Explorer starts it outside the tree.
 
