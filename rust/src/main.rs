@@ -387,7 +387,7 @@ impl App {
         let terms = std::mem::take(&mut self.terms);
         let hwnd = self.hwnd as isize;
         thread::spawn(move || {
-            let result = transcribe(&key, stream, &samples, &terms);
+            let result = deepgram::finish(&key, stream, &samples, &terms);
             let boxed = Box::into_raw(Box::new(result)) as isize;
             unsafe {
                 if PostMessageW(hwnd as HWND, WM_TRANSCRIPT, 0, boxed) == 0 {
@@ -498,31 +498,6 @@ impl App {
             }
             _ => {}
         }
-    }
-}
-
-/// Streaming text if there is any, else a batch upload of the recording
-/// (for example when the socket never connected).
-fn transcribe(key: &str, stream: Option<deepgram::Stream>, samples: &[i16], terms: &[String]) -> Transcript {
-    // streaming drops a rejected list itself; then batch must not send it
-    let mut terms = terms;
-    if let Some(stream) = stream {
-        let text = stream.finish();
-        if !text.is_empty() {
-            return Ok(text);
-        }
-        log("streaming produced no text; trying batch fallback");
-        if words::is_rejected(terms) {
-            terms = &[];
-        }
-    }
-    match deepgram::transcribe(key, samples, terms) {
-        // the same audio again, without the custom words
-        Err(deepgram::Error::KeytermsRejected) => {
-            words::reject(terms);
-            deepgram::transcribe(key, samples, &[])
-        }
-        other => other,
     }
 }
 
