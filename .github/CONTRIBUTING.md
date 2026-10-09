@@ -39,6 +39,8 @@ The code is in `rust/src/`:
 
 If a change can affect speed or reliability, run the benchmark in [`bench/`](../bench) before and after.
 
+If several people or agents work at the same time, follow the rules in [CLAUDE.md](../CLAUDE.md) ("several agents at the same time") and open issues with the task template.
+
 Please don't commit secrets. `.env` is git-ignored for a reason.
 
 ## Help wanted: macOS support
