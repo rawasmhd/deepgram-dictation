@@ -24,3 +24,11 @@ These rules apply when more than one agent (or person) works on the repository a
 7. **Delete the branch after the merge.** The commits stay in `main`. The branch name is only a bookmark.
 
 If a merge still shows a conflict, the agent that merges second resolves it on its own branch. `main` is never edited directly.
+
+## Rule: start the app through Explorer
+
+Start `dictation.exe` with `explorer.exe C:\Dictationust	argetelease\dictation.exe`. Never with `Start-Process`, `start`, `cargo run`, or `&` from a shell in a Claude Code session.
+
+A process started from a shell in the Claude desktop app is part of that app's process tree. When the Claude app updates itself, Windows closes the whole tree, and the app stops (#47). Explorer starts it outside the tree.
+
+To check: the parent process of `dictation.exe` must be `explorer.exe`.
