@@ -13,7 +13,7 @@ use tungstenite::Message;
 
 use crate::audio::SAMPLE_RATE;
 use crate::log;
-use crate::words;
+use crate::words::{self, Words};
 
 const HOST: &str = "api.deepgram.com";
 
@@ -134,12 +134,13 @@ pub fn transcribe(key: &str, samples: &[i16], terms: &[String]) -> Result<String
 
 /// The text of a recording: streaming text if there is any, else a batch
 /// upload (for example when the socket never connected), else a batch upload
-/// without the custom words when Deepgram rejects them.
-pub fn finish(key: &str, stream: Option<Stream>, samples: &[i16], terms: &[String]) -> Result<String, Error> {
+/// without the custom words when Deepgram rejects them. A rejected list is
+/// recorded in `words`.
+pub fn finish(key: &str, stream: Option<Stream>, samples: &[i16], terms: &[String], words: &Words) -> Result<String, Error> {
     let streamed = stream.map(Stream::finish);
     // read after the stream ends: streaming drops a rejected list itself
-    let rejected = words::is_rejected(terms);
-    fallback(streamed, terms, rejected, |t| transcribe(key, samples, t), words::reject)
+    let rejected = words.is_rejected(terms);
+    fallback(streamed, terms, rejected, |t| transcribe(key, samples, t), |t| words.reject(t))
 }
 
 /// The rules of `finish`, without the network. `streamed` is the streaming
@@ -226,10 +227,12 @@ impl Transcript {
 
 impl Stream {
     /// Connects in the background. Audio is buffered until the socket opens.
-    /// `on_final` runs on the network thread after each final phrase.
+    /// `on_final` runs on the network thread after each final phrase. A
+    /// rejected list is recorded in `words`.
     pub fn start(
         key: String,
         terms: Vec<String>,
+        words: Words,
         on_final: impl Fn() + Send + 'static,
     ) -> (Stream, Sender<Vec<i16>>) {
         let (audio_tx, audio_rx) = mpsc::channel();
@@ -237,7 +240,7 @@ impl Stream {
         let transcript = Transcript::default();
         let shared = transcript.clone();
         thread::spawn(move || {
-            if let Err(e) = run(&key, &terms, audio_rx, &shared, &on_final) {
+            if let Err(e) = run(&key, &terms, &words, audio_rx, &shared, &on_final) {
                 log(&format!("streaming error: {e}"));
             }
             let _ = done_tx.send(());
@@ -262,6 +265,7 @@ type Socket = tungstenite::WebSocket<MaybeTlsStream<TcpStream>>;
 fn run(
     key: &str,
     terms: &[String],
+    words: &Words,
     audio: Receiver<Vec<i16>>,
     transcript: &Transcript,
     on_final: &dyn Fn(),
@@ -269,7 +273,7 @@ fn run(
     let mut socket = match connect(key, terms) {
         // the audio waits in the channel, so nothing is lost
         Err(Error::KeytermsRejected) => {
-            words::reject(terms);
+            words.reject(terms);
             connect(key, &[])
         }
         other => other,

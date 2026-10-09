@@ -22,7 +22,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 use crate::gfx::{self, hex, round_rect, Canvas, Rgb};
 use crate::overlay::wide;
 use crate::setup::{blit, cref, framed, measure, text, Palette, DARK, DWMWA_CAPTION_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, LIGHT};
-use crate::{art, log, theme, words};
+use crate::words::{self, Words};
+use crate::{art, log, theme};
 
 const TITLE: &str = "Custom words - Deepgram Dictation";
 
@@ -109,16 +110,16 @@ fn ui() -> Option<Rc<Ui>> {
 
 /// Show the window, or bring it to the front if it is open. Returns when
 /// the window closes. A saved list is used from the next dictation.
-pub fn open() {
+pub fn open(words: &Words) {
     let open = OPEN.load(Ordering::Relaxed) as HWND;
     if !open.is_null() {
         unsafe { SetForegroundWindow(open) };
         return;
     }
-    unsafe { run() }
+    unsafe { run(words) }
 }
 
-unsafe fn run() {
+unsafe fn run(words: &Words) {
     let instance = GetModuleHandleW(ptr::null());
     let class = wide("DictationWordsRs");
     let big = theme::icon(&art::app_icon(GetSystemMetrics(SM_CXICON) as usize));
@@ -244,7 +245,7 @@ unsafe fn run() {
     for t in &terms {
         SendMessageW(list, LB_ADDSTRING, 0, wide(t).as_ptr() as LPARAM);
     }
-    let rejected = words::is_rejected(&terms).then(|| terms.clone());
+    let rejected = words.is_rejected(&terms).then(|| terms.clone());
 
     UI.with(|u| {
         *u.borrow_mut() = Some(Rc::new(Ui {

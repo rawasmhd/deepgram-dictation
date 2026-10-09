@@ -41,6 +41,7 @@ use art::Dot;
 use live::LivePaste;
 use overlay::{wide, Overlay, State, TIMER_FRAME};
 use tray::{Tray, WM_TRAY};
+use words::Words;
 
 const HOTKEY_TOGGLE: i32 = 1;
 const HOTKEY_QUIT: i32 = 2;
@@ -82,6 +83,7 @@ struct App {
     stream: Option<deepgram::Stream>,
     transcript: Option<deepgram::Transcript>,
     /// The custom words for the current dictation.
+    words: Words,
     terms: Vec<String>,
     live: Option<LivePaste>,
     last: Option<Delivery>,
@@ -100,7 +102,7 @@ fn main() {
 
     // only the Custom words window, without the app
     if std::env::args().any(|a| a == "--words") {
-        words_window::open();
+        words_window::open(&Words::new());
         return;
     }
 
@@ -182,6 +184,7 @@ fn main() {
             recording: None,
             stream: None,
             transcript: None,
+            words: Words::new(),
             terms: Vec::new(),
             live: None,
             last: None,
@@ -269,7 +272,13 @@ fn on_tray_menu(hwnd: HWND) {
             with_app(|app| app.on_hotkey(HOTKEY_TOGGLE));
         }
         Some(tray::CMD_SETTINGS) => open_settings(),
-        Some(tray::CMD_WORDS) => words_window::open(),
+        Some(tray::CMD_WORDS) => {
+            let mut words = None;
+            with_app(|app| words = Some(app.words.clone()));
+            if let Some(words) = words {
+                words_window::open(&words);
+            }
+        }
         Some(tray::CMD_AUTOSTART) => {
             let on = !config::autostart_enabled();
             match config::set_autostart(on) {
@@ -344,10 +353,10 @@ impl App {
 
     fn start(&mut self) {
         self.last = None;
-        self.terms = words::active();
+        self.terms = self.words.for_request();
         let (stream, sink) = if config::streaming() {
             let hwnd = self.hwnd as isize;
-            let (stream, sink) = deepgram::Stream::start(self.key.clone(), self.terms.clone(), move || unsafe {
+            let (stream, sink) = deepgram::Stream::start(self.key.clone(), self.terms.clone(), self.words.clone(), move || unsafe {
                 PostMessageW(hwnd as HWND, WM_LIVE_TEXT, 0, 0);
             });
             (Some(stream), Some(sink))
@@ -385,9 +394,10 @@ impl App {
         // wait for Deepgram off the UI thread, so the meter keeps moving
         let key = self.key.clone();
         let terms = std::mem::take(&mut self.terms);
+        let words = self.words.clone();
         let hwnd = self.hwnd as isize;
         thread::spawn(move || {
-            let result = deepgram::finish(&key, stream, &samples, &terms);
+            let result = deepgram::finish(&key, stream, &samples, &terms, &words);
             let boxed = Box::into_raw(Box::new(result)) as isize;
             unsafe {
                 if PostMessageW(hwnd as HWND, WM_TRANSCRIPT, 0, boxed) == 0 {
@@ -410,7 +420,7 @@ impl App {
     }
 
     fn on_transcript(&mut self, result: Transcript) {
-        if words::take_notice() {
+        if self.words.take_notice() {
             self.tray.balloon("Custom words not used", "Your custom words list is too long. Remove some words from words.txt.");
         }
         // some text is already in the document: finish what streaming produced

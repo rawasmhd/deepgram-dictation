@@ -4,9 +4,18 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::log;
+
+/// The custom words to send with each dictation, and the list that Deepgram
+/// rejected. One value for the app; clones share the rejected list, so the
+/// network threads can report a rejection.
+#[derive(Clone)]
+pub struct Words {
+    file: Option<PathBuf>,
+    rejected: Arc<Mutex<Option<Rejected>>>,
+}
 
 /// The list that Deepgram rejected (a hash of it), and whether the user
 /// still has to be told.
@@ -14,8 +23,6 @@ struct Rejected {
     hash: u64,
     notify: bool,
 }
-
-static REJECTED: Mutex<Option<Rejected>> = Mutex::new(None);
 
 /// Deepgram's limit for all key terms in one request.
 pub const TOKEN_LIMIT: usize = 500;
@@ -39,19 +46,52 @@ pub fn path() -> Option<PathBuf> {
     Some(std::env::current_exe().ok()?.with_file_name("words.txt"))
 }
 
-/// The terms to send with the next dictation. Read from the file each time,
-/// so a change works without a restart. Empty if Deepgram rejected this list.
-pub fn active() -> Vec<String> {
-    let terms = load();
-    if is_rejected(&terms) {
-        return Vec::new();
+impl Words {
+    /// The words in words.txt next to the .exe.
+    pub fn new() -> Words {
+        Words::at(path())
     }
-    terms
+
+    fn at(file: Option<PathBuf>) -> Words {
+        Words { file, rejected: Arc::default() }
+    }
+
+    /// The terms to send with the next dictation. Read from the file each
+    /// time, so a change works without a restart. Empty if Deepgram rejected
+    /// this list.
+    pub fn for_request(&self) -> Vec<String> {
+        let terms = self.file.as_ref().map_or_else(Vec::new, read);
+        if self.is_rejected(&terms) {
+            return Vec::new();
+        }
+        terms
+    }
+
+    /// Deepgram rejected exactly this list.
+    pub fn is_rejected(&self, terms: &[String]) -> bool {
+        self.rejected.lock().unwrap().as_ref().is_some_and(|r| r.hash == hash(terms))
+    }
+
+    /// Deepgram rejected these terms. Do not send them again until the file
+    /// changes, and tell the user once.
+    pub fn reject(&self, terms: &[String]) {
+        log(&format!("Deepgram rejected the custom words ({} terms); dictating without them until words.txt changes", terms.len()));
+        *self.rejected.lock().unwrap() = Some(Rejected { hash: hash(terms), notify: true });
+    }
+
+    /// True once after a list was rejected: time to tell the user.
+    pub fn take_notice(&self) -> bool {
+        self.rejected.lock().unwrap().as_mut().is_some_and(|r| std::mem::take(&mut r.notify))
+    }
 }
 
 /// All the terms in words.txt. Empty if there is no file.
 pub fn load() -> Vec<String> {
-    path().and_then(|p| std::fs::read_to_string(p).ok()).map_or_else(Vec::new, |t| parse(&t))
+    path().as_ref().map_or_else(Vec::new, read)
+}
+
+fn read(path: &PathBuf) -> Vec<String> {
+    std::fs::read_to_string(path).map_or_else(|_| Vec::new(), |t| parse(&t))
 }
 
 /// Write the terms to words.txt. The comment lines stay.
@@ -101,11 +141,6 @@ pub fn fill(tokens: usize) -> Fill {
     }
 }
 
-/// Deepgram rejected exactly this list.
-pub fn is_rejected(terms: &[String]) -> bool {
-    REJECTED.lock().unwrap().as_ref().is_some_and(|r| r.hash == hash(terms))
-}
-
 /// One term per line. Empty lines and lines that start with # are skipped,
 /// and so is a term that is already in the list (case-insensitive).
 pub fn parse(text: &str) -> Vec<String> {
@@ -121,18 +156,6 @@ pub fn parse(text: &str) -> Vec<String> {
         }
     }
     terms
-}
-
-/// Deepgram rejected these terms. Do not send them again until the file
-/// changes, and tell the user once.
-pub fn reject(terms: &[String]) {
-    log(&format!("Deepgram rejected the custom words ({} terms); dictating without them until words.txt changes", terms.len()));
-    *REJECTED.lock().unwrap() = Some(Rejected { hash: hash(terms), notify: true });
-}
-
-/// True once after a list was rejected: time to tell the user.
-pub fn take_notice() -> bool {
-    REJECTED.lock().unwrap().as_mut().is_some_and(|r| std::mem::take(&mut r.notify))
 }
 
 fn hash(terms: &[String]) -> u64 {
@@ -207,14 +230,61 @@ mod tests {
         assert_eq!(url_encode("Zoë"), "Zo%C3%AB");
     }
 
+    /// A Words value on its own words.txt in the temp folder.
+    fn words_with(name: &str, text: &str) -> (Words, PathBuf) {
+        let file = std::env::temp_dir().join(format!("dictation-test-{}-{name}.txt", std::process::id()));
+        std::fs::write(&file, text).unwrap();
+        (Words::at(Some(file.clone())), file)
+    }
+
     #[test]
-    fn a_rejected_list_is_reported_once_and_skipped_until_it_changes() {
-        let list = vec!["Alpha".to_string(), "Beta".to_string()];
-        reject(&list);
-        assert!(take_notice());
-        assert!(!take_notice());
-        assert!(is_rejected(&list));
-        assert!(!is_rejected(&["Alpha".to_string()]));
-        *REJECTED.lock().unwrap() = None;
+    fn a_rejected_list_is_not_sent_again() {
+        let (words, file) = words_with("rejected", "Alpha
+Beta
+");
+        let list = words.for_request();
+        assert_eq!(list, ["Alpha", "Beta"]);
+        words.reject(&list);
+        assert!(words.for_request().is_empty());
+        assert!(words.is_rejected(&list));
+        assert!(!words.is_rejected(&["Alpha".to_string()]));
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn a_changed_file_is_sent_again() {
+        let (words, file) = words_with("changed", "Alpha
+Beta
+");
+        words.reject(&words.for_request());
+        std::fs::write(&file, "Alpha
+").unwrap();
+        assert_eq!(words.for_request(), ["Alpha"]);
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn the_notice_fires_once() {
+        let words = Words::at(None);
+        assert!(!words.take_notice());
+        words.reject(&["Alpha".to_string()]);
+        assert!(words.take_notice());
+        assert!(!words.take_notice());
+    }
+
+    #[test]
+    fn clones_share_the_rejected_list() {
+        let words = Words::at(None);
+        let list = ["Alpha".to_string()];
+        words.clone().reject(&list);
+        assert!(words.is_rejected(&list));
+        assert!(words.take_notice());
+    }
+
+    #[test]
+    fn no_file_means_no_terms() {
+        assert!(Words::at(None).for_request().is_empty());
+        let missing = std::env::temp_dir().join("dictation-test-no-such-file.txt");
+        assert!(Words::at(Some(missing)).for_request().is_empty());
     }
 }
