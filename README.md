@@ -113,6 +113,8 @@ Dr. Smith
 
 More detail: [docs/keyterm-prompting.md](docs/keyterm-prompting.md).
 
+In a shared room, other people's voices get into the text. What a "voice profile" could do about it, and what it costs: [docs/voice-profile.md](docs/voice-profile.md).
+
 The language (`en`) and the model (`nova-3`) are set in [`rust/src/deepgram.rs`](rust/src/deepgram.rs). To dictate in another language, change `"language"` there and build the app again (see [Deepgram's language list](https://developers.deepgram.com/docs/models-languages-overview)).
 
 ## Upgrading from the Python version
