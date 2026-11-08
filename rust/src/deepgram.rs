@@ -23,7 +23,10 @@ const PARAMS: &[(&str, &str)] = &[
     ("language", "en"),
     ("smart_format", "true"),
     ("punctuate", "true"),
-    ("dictation", "true"), // spoken "comma" -> ","
+    // Off: with "true", Deepgram also turns every spoken "point" into a
+    // period ("the main point" -> "The main."). Spoken "comma" etc. come
+    // back with our own layer (#67). See #66.
+    ("dictation", "false"),
     ("filler_words", "false"),
 ];
 
@@ -430,6 +433,7 @@ mod tests {
     fn query_has_the_expected_params() {
         let q = query(STREAM_PARAMS, &[]);
         assert!(q.starts_with("model=nova-3&language=en&"));
+        assert!(q.contains("&dictation=false&"), "dictation must stay off (#66)");
         assert!(q.ends_with("interim_results=false"));
     }
 

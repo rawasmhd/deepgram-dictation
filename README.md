@@ -21,7 +21,7 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores
 - A tray icon that shows the state (recording, transcribing, a problem), with a menu for the settings, start at login, the log file and quit
 - Follows the Windows light or dark mode
 - Keeps your dictation on the clipboard, so nothing is lost if no text box had focus
-- Smart formatting and spoken punctuation ("comma", "new paragraph") with Deepgram's `nova-3`
+- Smart formatting and automatic punctuation with Deepgram's `nova-3`. Spoken punctuation ("comma", "new paragraph") is off for now, because Deepgram's dictation mode also turns the word "point" into a period ([#66](https://github.com/rawasmhd/deepgram-dictation/issues/66), [#67](https://github.com/rawasmhd/deepgram-dictation/issues/67))
 - **Custom words**: a list of names and rare words that Deepgram should recognize, with a small window to edit it (see [Custom words](#custom-words))
 - **One small file**: `dictation.exe` is about 1 MB, needs no Python or other runtime, and uses about 15 MB of memory
 
