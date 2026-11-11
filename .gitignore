@@ -22,3 +22,6 @@ rust/target/
 
 # Benchmark log
 bench/bench.log
+
+# Impeccable design-hook cache
+.impeccable/hook.cache.json
