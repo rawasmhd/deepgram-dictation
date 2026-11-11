@@ -1,0 +1,618 @@
+<title>Dictation Studio</title>
+<meta charset="utf-8">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;600&display=swap">
+<style>
+/* =====================================================================
+   SHELL: the proof sheet. The same in every prototype page.
+   Page chrome follows the viewer's theme. The stages inside it do not:
+   they show the product's own colours, exactly as the app would draw them.
+   ===================================================================== */
+:root {
+  --pg-bg: #f3f2ef;
+  --pg-fg: #1c1c1a;
+  --pg-muted: #6a6a66;
+  --pg-line: #dcdbd6;
+  --pg-card: #ffffff;
+  --pg-accent: #1c1c1a;
+  --pg-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --pg-bg: #151515; --pg-fg: #ececea; --pg-muted: #9c9c98; --pg-line: #2b2b2a; --pg-card: #1d1d1c; --pg-accent: #ececea;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --pg-bg: #151515; --pg-fg: #ececea; --pg-muted: #9c9c98; --pg-line: #2b2b2a; --pg-card: #1d1d1c; --pg-accent: #ececea;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--pg-bg); color: var(--pg-fg); font-family: var(--pg-font); font-size: 14px; line-height: 1.5;
+  padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.sheet { max-width: 1120px; margin: 0 auto; display: grid; gap: 48px; }
+.sheet h1 { font-size: 32px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; text-wrap: balance; }
+.sheet h2 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+.lede { color: var(--pg-muted); margin: 0; max-width: 64ch; }
+.head { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid var(--pg-line); padding-bottom: 20px; }
+.section { display: grid; gap: 14px; }
+.section > p { color: var(--pg-muted); margin: 0; max-width: 72ch; }
+.row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.scroll { overflow-x: auto; max-width: 100%; padding-bottom: 6px; }
+.cap { color: var(--pg-muted); font-size: 12px; margin: 6px 0 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btns button, .seg button {
+  font: inherit; font-size: 13px; color: var(--pg-fg); background: var(--pg-card); border: 1px solid var(--pg-line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.btns button:hover, .seg button:hover { border-color: var(--pg-fg); }
+.btns button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--pg-line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button[aria-pressed="true"] { background: var(--pg-fg); color: var(--pg-bg); }
+.note { font-size: 12px; color: var(--pg-muted); }
+kbd { font: inherit; font-size: 12px; border: 1px solid var(--pg-line); border-radius: 4px; padding: 0 5px; }
+
+/* The desktop stage: a wallpaper, a window behind, and the taskbar.
+   data-theme on the stage is the Windows mode (dark or light). */
+.stage { position: relative; width: 760px; height: 300px; overflow: hidden; border-radius: 10px; background: #2d3b4c; flex: none; }
+.stage[data-theme="light"] { background: #c6d0da; }
+.stage .wallwin { position: absolute; left: 60px; top: 24px; width: 420px; height: 240px; background: #1f2630; border-radius: 8px; opacity: 0.9; }
+.stage[data-theme="light"] .wallwin { background: #f6f7f9; }
+.stage .wallwin i { display: block; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.12); margin: 14px 18px 0; }
+.stage[data-theme="light"] .wallwin i { background: rgba(0,0,0,0.08); }
+.stage .wallwin i:nth-child(1) { width: 52%; margin-top: 44px; }
+.stage .wallwin i:nth-child(2) { width: 78%; }
+.stage .wallwin i:nth-child(3) { width: 64%; }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; background: #202020; display: flex; align-items: center; justify-content: center; gap: 18px; }
+.stage[data-theme="light"] .taskbar { background: #eeeeee; }
+.taskbar .tb { width: 20px; height: 20px; border-radius: 4px; background: rgba(255,255,255,0.22); }
+.stage[data-theme="light"] .taskbar .tb { background: rgba(0,0,0,0.18); }
+.taskbar .tb.start { background: #4cc2ff; }
+.taskbar .tray { position: absolute; right: 16px; top: 0; height: 48px; display: flex; align-items: center; gap: 14px; }
+.taskbar .tray .clock { font-size: 11px; color: rgba(255,255,255,0.8); line-height: 1.2; text-align: right; font-variant-numeric: tabular-nums; }
+.stage[data-theme="light"] .taskbar .tray .clock { color: rgba(0,0,0,0.75); }
+.taskbar .tray svg { display: block; }
+.meter-slot { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); }
+.meter-slot .meter[data-state="hidden"] { opacity: 0; transform: translateY(10px); }
+
+/* Windows (Settings, Custom words) sit on a neutral mat */
+.mat { padding: 24px; border-radius: 10px; background: #2d3b4c; flex: none; }
+.mat[data-theme="light"] { background: #c6d0da; }
+
+/* Token chips */
+.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.chip { display: grid; gap: 4px; font-size: 12px; }
+.chip i { display: block; height: 36px; border-radius: 6px; border: 1px solid var(--pg-line); }
+.chip code { font-family: Cascadia Mono, Consolas, monospace; font-size: 11px; color: var(--pg-muted); }
+.chip b { font-weight: 600; }
+
+@media (max-width: 820px) {
+  .stage { width: 640px; }
+}
+
+/* =====================================================================
+   DIRECTION: STUDIO
+   A broadcast studio desk. A bakelite panel with engraved cream labels,
+   a red ON AIR lamp, a VU needle. Light mode is the same desk in cream
+   enamel. The .mat, .stage and .traystrip wrappers carry data-theme.
+   ===================================================================== */
+.dd {
+  --dd-ground: #1c1917; --dd-panel: #26221f; --dd-panel-edge: #3d3631;
+  --dd-field: #15120f; --dd-field-edge: #3d3631; --dd-field-focus: #d6a84a;
+  --dd-ink: #efe6d6; --dd-ink-2: #b4a893; --dd-ink-3: #9a8e7e; --dd-line: #3d3631;
+  --dd-accent: #d6a84a; --dd-on-accent: #1c1917; --dd-accent-soft: rgba(214, 168, 74, 0.18);
+  --dd-rec: #ff3b2f; --dd-pause: #ffb02e; --dd-work: #3ddc84; --dd-problem: #ff3b2f; --dd-problem-ink: #ff6a5f; --dd-info: #efe6d6;
+  --dd-level-0: #8a7f70; --dd-level-1: #efe6d6; --dd-level-2: #ff3b2f;
+  --dd-shadow: 0 8px 22px rgba(0,0,0,0.5);
+  --dd-key-hi: rgba(255,255,255,0.06);
+  --dd-font: "Bahnschrift", "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --dd-font-display: "Bahnschrift SemiBold Condensed", "Bahnschrift", "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --dd-font-num: "Bahnschrift", "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --dd-weight-body: 400; --dd-weight-strong: 600; --dd-weight-display: 600;
+  --dd-case-display: uppercase; --dd-track-display: 0.12em;
+  --dd-radius-sm: 3px; --dd-radius-md: 6px; --dd-radius-lg: 10px; --dd-radius-meter: 12px;
+  --dd-stroke: 1px; --dd-meter-w: 380px; --dd-meter-h: 64px;
+  --dd-space-1: 4px; --dd-space-2: 8px; --dd-space-3: 12px; --dd-space-4: 16px; --dd-space-5: 24px; --dd-space-6: 32px;
+  --dd-fast: 120ms; --dd-base: 200ms; --dd-slow: 280ms; --dd-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: var(--dd-font); font-size: 14px; line-height: 1.4; color: var(--dd-ink);
+  font-variant-numeric: tabular-nums;
+}
+[data-theme="light"] .dd {
+  --dd-ground: #efe9df; --dd-panel: #f8f4ec; --dd-panel-edge: #d6cdbd;
+  --dd-field: #ffffff; --dd-field-edge: #cfc5b3; --dd-field-focus: #7f5b14;
+  --dd-ink: #1c1917; --dd-ink-2: #5c544b; --dd-ink-3: #6f665a; --dd-line: #d6cdbd;
+  --dd-accent: #7f5b14; --dd-on-accent: #ffffff; --dd-accent-soft: rgba(127, 91, 20, 0.18);
+  --dd-rec: #c62828; --dd-pause: #b26a00; --dd-work: #1e7a46; --dd-problem: #c62828; --dd-problem-ink: #c62828; --dd-info: #1c1917;
+  --dd-level-0: #b3a893; --dd-level-1: #1c1917; --dd-level-2: #c62828;
+  --dd-shadow: 0 8px 22px rgba(60,45,20,0.22);
+  --dd-key-hi: rgba(255,255,255,0.7);
+}
+.dd ::selection { background: var(--dd-accent); color: var(--dd-on-accent); }
+.dd .disp { font-family: var(--dd-font-display); font-weight: var(--dd-weight-display); text-transform: var(--dd-case-display); letter-spacing: var(--dd-track-display); }
+.dd .plate { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; color: var(--dd-ink-2); }
+
+/* --- Meter: lamp | VU needle | word ------------------------------------ */
+.meter {
+  position: relative; width: var(--dd-meter-w); height: var(--dd-meter-h);
+  background: var(--dd-panel); box-shadow: 0 0 0 1px var(--dd-panel-edge), inset 0 1px 0 var(--dd-key-hi), var(--dd-shadow);
+  border-radius: var(--dd-radius-meter); display: grid; grid-template-columns: 56px 1fr auto; align-items: center;
+  transition: opacity var(--dd-slow) var(--dd-ease), transform var(--dd-slow) var(--dd-ease);
+  flex: none;
+}
+.meter__mark { position: relative; width: 56px; height: 100%; display: grid; place-items: center; align-content: center; gap: 3px; }
+.meter__well { width: 22px; height: 22px; border-radius: 50%; background: var(--dd-field); box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); display: grid; place-items: center; }
+.meter__lamp { width: 14px; height: 14px; border-radius: 50%; background: var(--dd-level-0); opacity: 0.35; transition: background var(--dd-fast) ease, opacity var(--dd-fast) ease, box-shadow var(--dd-fast) ease; }
+.meter__tag { font-size: 8px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dd-ink-3); line-height: 1; font-weight: 600; }
+.meter[data-state="rec"] .meter__lamp { background: var(--dd-rec); opacity: 1; box-shadow: 0 0 10px var(--dd-rec); animation: dd-breathe 1.26s ease-in-out infinite alternate; }
+.meter[data-state="pause"] .meter__lamp { background: var(--dd-pause); opacity: 1; box-shadow: 0 0 10px var(--dd-pause); }
+.meter[data-state="work"] .meter__lamp { background: var(--dd-work); opacity: 1; box-shadow: 0 0 10px var(--dd-work); }
+.meter[data-state="info"] .meter__lamp { background: var(--dd-info); opacity: 1; box-shadow: 0 0 8px var(--dd-info); }
+.meter[data-state="error"] .meter__lamp { background: var(--dd-problem); opacity: 1; box-shadow: 0 0 10px var(--dd-problem); animation: dd-blink 1s steps(2, start) infinite; }
+@keyframes dd-breathe { from { box-shadow: 0 0 6px var(--dd-rec); } to { box-shadow: 0 0 14px var(--dd-rec); } }
+@keyframes dd-blink { to { opacity: 0.25; } }
+
+.meter__level { height: 100%; display: grid; place-items: center; overflow: hidden; }
+.meter__level svg { display: block; }
+.meter__level .scale { stroke: var(--dd-level-0); fill: none; }
+.meter__level .red { stroke: var(--dd-level-2); fill: none; }
+.meter__level .num { fill: var(--dd-ink-2); font-size: 8px; font-family: var(--dd-font); font-weight: 600; }
+.meter__level .num.hot { fill: var(--dd-level-2); }
+.meter__level .needle { stroke: var(--dd-level-1); stroke-width: 1.5; transform-origin: 75px 60px; transform: rotate(-40deg); transition: transform 90ms linear; }
+.meter__level .pivot { fill: var(--dd-line); }
+
+.meter__word {
+  padding: 0 18px 0 8px; white-space: nowrap; display: flex; align-items: center; justify-content: flex-end; height: 100%; min-width: 96px;
+  font-family: var(--dd-font-display); font-weight: var(--dd-weight-display); text-transform: var(--dd-case-display); letter-spacing: var(--dd-track-display);
+  font-size: 13px; color: var(--dd-ink);
+}
+.meter[data-state="rec"] .meter__word { font-size: 24px; letter-spacing: 0.04em; font-family: var(--dd-font-num); line-height: 1; }
+.meter[data-state="pause"] .meter__word { color: var(--dd-pause); }
+.meter[data-state="work"] .meter__word { color: var(--dd-work); }
+.meter[data-state="error"] .meter__word { color: var(--dd-problem-ink); }
+/* a notice has no VU, so the word takes the room */
+.meter[data-state="info"], .meter[data-state="error"] { grid-template-columns: 56px 1fr; }
+.meter[data-state="info"] .meter__level, .meter[data-state="error"] .meter__level { display: none; }
+.meter[data-state="info"] .meter__word, .meter[data-state="error"] .meter__word { justify-content: flex-start; padding-left: 0; }
+
+/* --- Window frame --------------------------------------------------- */
+.win { width: 460px; background: var(--dd-ground); color: var(--dd-ink); box-shadow: 0 0 0 1px var(--dd-panel-edge), 0 12px 32px rgba(0,0,0,0.45); border-radius: var(--dd-radius-lg); overflow: hidden; flex: none; }
+.win__title { height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 10px 0 12px; font-size: 13px; }
+.win__title svg { display: block; }
+.win__title > span:not(.x) { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win__title .x { flex: none; width: 32px; height: 32px; display: grid; place-items: center; color: var(--dd-ink-2); }
+.win__body { padding: 16px 24px 24px; display: grid; gap: 20px; }
+.win h3 { margin: 0; font-size: 28px; line-height: 1.1; }
+.win .sub { color: var(--dd-ink-2); margin: 6px 0 0; }
+.win .panel { background: var(--dd-panel); border: 1px solid var(--dd-panel-edge); border-radius: var(--dd-radius-lg); box-shadow: inset 0 1px 0 var(--dd-key-hi); }
+.win .panel > div { padding: 16px; }
+.win .panel > div + div { border-top: 1px solid var(--dd-line); }
+.win .label { margin: 0 0 8px; }
+.win .help { color: var(--dd-ink-2); font-size: 12px; margin: 8px 0 0; }
+.win a { color: var(--dd-accent); text-decoration: underline; text-underline-offset: 3px; }
+.win .status { font-size: 12px; color: var(--dd-ink-2); min-height: 18px; margin: 0; }
+.win .status.err { color: var(--dd-problem-ink); }
+.win .status.warn { color: var(--dd-pause); }
+.win__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--dd-line); background: var(--dd-field); }
+
+.field { position: relative; display: flex; align-items: center; height: 36px; background: var(--dd-field); border: var(--dd-stroke) solid var(--dd-field-edge); border-radius: var(--dd-radius-sm); padding: 0 12px; gap: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); }
+.field.focus { border-color: var(--dd-field-focus); }
+.field input { flex: 1; min-width: 0; font: inherit; color: var(--dd-ink); background: transparent; border: 0; outline: 0; letter-spacing: 0.06em; }
+.field input::placeholder { color: var(--dd-ink-3); letter-spacing: 0; }
+.field .tbtn { font: inherit; font-size: 11px; color: var(--dd-ink-2); background: none; border: 0; padding: 4px 0 4px 8px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; cursor: pointer; }
+.field .caret { width: 1px; height: 18px; background: var(--dd-ink); animation: dd-caret 1s steps(2) infinite; }
+@keyframes dd-caret { to { opacity: 0; } }
+
+.btn { height: 36px; min-width: 96px; padding: 0 16px; font: inherit; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dd-ink); background: var(--dd-panel); border: 1px solid var(--dd-panel-edge); border-radius: var(--dd-radius-md); box-shadow: inset 0 1px 0 var(--dd-key-hi), 0 1px 2px rgba(0,0,0,0.3); cursor: pointer; }
+.btn:hover { border-color: var(--dd-ink-3); }
+.btn:active { box-shadow: inset 0 1px 2px rgba(0,0,0,0.4); }
+.btn.primary { background: var(--dd-accent); color: var(--dd-on-accent); border-color: var(--dd-accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn[disabled] { color: var(--dd-ink-3); border-color: var(--dd-line); box-shadow: none; cursor: default; }
+.btn.focus { outline: 2px solid var(--dd-accent); outline-offset: 2px; }
+
+.rowline { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.switch { position: relative; width: 48px; height: 24px; border: 1px solid var(--dd-panel-edge); border-radius: 4px; background: var(--dd-field); flex: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.35); }
+.switch i { position: absolute; top: 2px; left: 2px; width: 20px; height: 18px; border-radius: 3px; background: var(--dd-panel); border: 1px solid var(--dd-panel-edge); box-shadow: inset 0 1px 0 var(--dd-key-hi), 0 1px 2px rgba(0,0,0,0.35); transition: left var(--dd-fast) var(--dd-ease); }
+.switch[data-on] { background: var(--dd-accent); border-color: var(--dd-accent); }
+.switch[data-on] i { left: 24px; }
+
+.list { border: 1px solid var(--dd-field-edge); border-radius: var(--dd-radius-sm); background: var(--dd-field); max-height: 196px; overflow: hidden; }
+.list div { height: 32px; display: flex; align-items: center; padding: 0 12px; border-top: 1px solid var(--dd-line); }
+.list div:first-child { border-top: 0; }
+.list div[data-sel] { background: var(--dd-accent-soft); color: var(--dd-ink); }
+.count { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--dd-ink-2); }
+.count .meterline { width: 140px; height: 3px; border-radius: 2px; background: var(--dd-line); position: relative; }
+.count .meterline i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--dd-accent); }
+
+/* --- Tray --------------------------------------------------------------- */
+.traystrip { display: flex; gap: 28px; align-items: center; height: 48px; padding: 0 20px; background: #202020; border-radius: 8px; flex: none; }
+.traystrip[data-theme="light"] { background: #eeeeee; }
+.traystrip figure { margin: 0; display: grid; justify-items: center; gap: 2px; }
+.traystrip figcaption { font-size: 10px; color: rgba(255,255,255,0.7); font-family: var(--pg-font); }
+.traystrip[data-theme="light"] figcaption { color: rgba(0,0,0,0.65); }
+.menu { width: 240px; background: var(--dd-panel); box-shadow: 0 0 0 1px var(--dd-panel-edge), inset 0 1px 0 var(--dd-key-hi), var(--dd-shadow); border-radius: var(--dd-radius-md); padding: 4px 0; flex: none; }
+.menu div { height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 10px; }
+.menu div span { flex: 1; }
+.menu div kbd { border: 0; padding: 0; font-size: 13px; color: var(--dd-ink-2); }
+.menu div.dim { color: var(--dd-ink-3); height: 28px; }
+.menu div.hover { background: var(--dd-accent-soft); color: var(--dd-ink); }
+.menu div .chk { width: 16px; height: 16px; display: grid; place-items: center; flex: none; color: var(--dd-accent); }
+.menu hr { border: 0; border-top: 1px solid var(--dd-line); margin: 4px 0; }
+.toast { width: 360px; background: var(--dd-panel); box-shadow: 0 0 0 1px var(--dd-panel-edge), inset 0 1px 0 var(--dd-key-hi), var(--dd-shadow); border-radius: var(--dd-radius-md); padding: 14px 16px; display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; flex: none; }
+.toast b { display: block; font-size: 14px; }
+.toast small { color: var(--dd-ink-2); font-size: 13px; }
+
+.icons { display: flex; align-items: flex-end; gap: 24px; }
+.icons figure { margin: 0; display: grid; justify-items: center; gap: 6px; font-size: 12px; color: var(--pg-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .meter[data-state="rec"] .meter__lamp, .meter[data-state="error"] .meter__lamp, .field .caret { animation: none; }
+  .meter__level .needle { transition: none; }
+}
+</style>
+
+<div class="sheet dd-page">
+  <header class="head">
+    <div>
+      <h1>Studio</h1>
+      <p class="lede">A broadcast studio desk. A bakelite panel with engraved cream labels, a red ON AIR lamp that lights while you speak, and a VU needle that swings with your voice. Windows light mode is the same desk in cream enamel.</p>
+    </div>
+    <div>
+      <div class="seg" role="group" aria-label="Windows mode of the desktop and the product">
+        <button type="button" id="mode-dark" aria-pressed="true">Windows dark</button>
+        <button type="button" id="mode-light" aria-pressed="false">Windows light</button>
+      </div>
+      <p class="note">Changes the desktop, the taskbar and the meter: Studio follows Windows mode.</p>
+    </div>
+  </header>
+
+  <!-- 1. The meter, live -->
+  <section class="section">
+    <h2>The meter, live</h2>
+    <p>Above the taskbar, 12 px up, never focusable. The lamp is the recording mark; the needle is the level; the timer is engraved at the right. Press the buttons or let it run.</p>
+    <div class="scroll">
+      <div class="stage" id="stage" data-theme="dark">
+        <div class="wallwin"><i></i><i></i><i></i></div>
+        <div class="meter-slot"><div class="meter dd" id="live" data-state="hidden"></div></div>
+        <div class="taskbar">
+          <span class="tb start"></span><span class="tb"></span><span class="tb"></span><span class="tb"></span><span class="tb"></span>
+          <div class="tray"><span class="tray-icon" id="tray-live"></span><span class="tb" style="width:16px;height:16px"></span><span class="tb" style="width:16px;height:16px"></span><div class="clock">14:07<br>11/11/2026</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="btns" id="demo-btns">
+      <button type="button" data-go="rec"><kbd>Alt+M</kbd> start</button>
+      <button type="button" data-go="pause">switch window (Paused)</button>
+      <button type="button" data-go="work"><kbd>Alt+M</kbd> stop (Transcribing)</button>
+      <button type="button" data-go="info">notice</button>
+      <button type="button" data-go="error">error</button>
+      <button type="button" data-go="auto">auto-play</button>
+    </div>
+  </section>
+
+  <!-- 2. Every state -->
+  <section class="section">
+    <h2>Every state of the meter</h2>
+    <p>Recording, Paused, Transcribing, an information notice and an error. Each has a lamp colour, an engraved tag and a word. The needle keeps moving while Paused and rests at -20 while Transcribing, where the green lamp carries the state. Shown in both Windows modes.</p>
+    <div class="scroll"><div class="row" id="states" style="gap:16px"></div></div>
+  </section>
+
+  <!-- 3. Settings -->
+  <section class="section">
+    <h2>Settings</h2>
+    <p>Opened at first run, from the tray, or with <code>--setup</code>. The content sits in a bezel panel; the keys are bakelite, the Save key is brass. Enter saves, Esc cancels. Dark and light.</p>
+    <div class="scroll"><div class="row">
+      <div class="mat" data-theme="dark"><div class="win dd">
+        <div class="win__title"><svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1c1917"/><circle cx="32" cy="32" r="26" fill="none" stroke="#d6a84a" stroke-width="3"/><rect x="24" y="12" width="16" height="26" rx="8" fill="#efe6d6"/><path d="M18 30a14 14 0 0 0 28 0M32 44v8M23 52h18" stroke="#efe6d6" stroke-width="5" fill="none"/></svg><span>Deepgram Dictation</span><span class="x"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.2"/></svg></span></div>
+        <div class="win__body">
+          <div><h3 class="disp">Settings</h3><p class="sub">Press Alt+M in any app, speak, then press Alt+M again.</p></div>
+          <div class="panel">
+            <div>
+              <p class="label plate">Deepgram API key</p>
+              <div class="field focus"><input type="text" id="key1" value="••••••••••••••••••••••••••••••••••••" aria-label="Deepgram API key" readonly><button type="button" class="tbtn">Show key</button></div>
+              <p class="help">Get a key at <a href="https://console.deepgram.com">console.deepgram.com</a>, under API Keys.</p>
+            </div>
+            <div class="rowline"><span>Start when I sign in to Windows</span><span class="switch" data-on><i></i></span></div>
+          </div>
+          <p class="status">Checking the key…</p>
+        </div>
+        <div class="win__foot"><button type="button" class="btn">Cancel</button><button type="button" class="btn primary">Save</button></div>
+      </div></div>
+      <div class="mat" data-theme="light"><div class="win dd">
+        <div class="win__title"><svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1c1917"/><circle cx="32" cy="32" r="26" fill="none" stroke="#d6a84a" stroke-width="3"/><rect x="24" y="12" width="16" height="26" rx="8" fill="#efe6d6"/><path d="M18 30a14 14 0 0 0 28 0M32 44v8M23 52h18" stroke="#efe6d6" stroke-width="5" fill="none"/></svg><span>Deepgram Dictation</span><span class="x"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.2"/></svg></span></div>
+        <div class="win__body">
+          <div><h3 class="disp">Settings</h3><p class="sub">Press Alt+M in any app, speak, then press Alt+M again.</p></div>
+          <div class="panel">
+            <div>
+              <p class="label plate">Deepgram API key</p>
+              <div class="field" style="border-color:var(--dd-problem)"><input type="text" id="key2" value="dg_7f3…" aria-label="Deepgram API key"><button type="button" class="tbtn">Hide key</button></div>
+              <p class="help">Get a key at <a href="https://console.deepgram.com">console.deepgram.com</a>, under API Keys.</p>
+            </div>
+            <div class="rowline"><span>Start when I sign in to Windows</span><span class="switch"><i></i></span></div>
+          </div>
+          <p class="status err">Key rejected - check your API key</p>
+        </div>
+        <div class="win__foot"><button type="button" class="btn">Cancel</button><button type="button" class="btn primary">Save</button></div>
+      </div></div>
+    </div></div>
+    <div class="scroll"><div class="row">
+      <div class="mat" data-theme="dark"><div class="win dd" style="width:460px">
+        <div class="win__body" style="padding-top:24px">
+          <p class="label plate">Field states</p>
+          <div class="field"><input type="text" id="f-empty" placeholder="Paste your API key" aria-label="example empty field"></div>
+          <div class="field focus"><input type="text" id="f-focus" value="dg_" aria-label="example focused field"><span class="caret"></span></div>
+          <p class="label plate" style="margin-top:8px">Keys</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary">Save</button><button type="button" class="btn">Cancel</button><button type="button" class="btn focus">Add</button><button type="button" class="btn" disabled>Remove</button></div>
+          <p class="label plate" style="margin-top:8px">Paddle switch</p>
+          <div style="display:flex;gap:16px"><span class="switch"><i></i></span><span class="switch" data-on><i></i></span></div>
+        </div>
+      </div></div>
+    </div></div>
+  </section>
+
+  <!-- 4. Custom words -->
+  <section class="section">
+    <h2>Custom words</h2>
+    <p>A field with Add, the list in a dark well, Remove, and a count on a brass gauge. The selected row glows brass. Near the limit the count turns amber, over it red. Dark and light.</p>
+    <div class="scroll"><div class="row">
+      <div class="mat" data-theme="dark"><div class="win dd">
+        <div class="win__title"><svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1c1917"/><circle cx="32" cy="32" r="26" fill="none" stroke="#d6a84a" stroke-width="3"/><rect x="24" y="12" width="16" height="26" rx="8" fill="#efe6d6"/><path d="M18 30a14 14 0 0 0 28 0M32 44v8M23 52h18" stroke="#efe6d6" stroke-width="5" fill="none"/></svg><span>Custom words - Deepgram Dictation</span><span class="x"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.2"/></svg></span></div>
+        <div class="win__body">
+          <div><h3 class="disp">Custom words</h3><p class="sub">Deepgram listens for these names and words.</p></div>
+          <div class="panel">
+            <div>
+              <p class="label plate">Add a word or phrase</p>
+              <div style="display:flex;gap:8px"><div class="field focus" style="flex:1"><input type="text" id="w1" placeholder="Name or phrase" aria-label="Add a word or phrase"><span class="caret"></span></div><button type="button" class="btn" style="min-width:80px">Add</button></div>
+            </div>
+            <div>
+              <div class="list">
+                <div>Deepgram</div><div data-sel>GitHub Actions</div><div>Kubernetes</div><div>Dr. Okafor</div><div>Rawas</div><div>SignPath</div>
+              </div>
+              <div class="count" style="margin-top:10px"><span>6 words · about 70 of 500 tokens</span><span class="meterline"><i style="width:14%"></i></span></div>
+            </div>
+          </div>
+          <p class="status warn">The list is almost full. Keep the words Deepgram gets wrong.</p>
+        </div>
+        <div class="win__foot"><button type="button" class="btn">Remove</button><button type="button" class="btn">Cancel</button><button type="button" class="btn primary">Save</button></div>
+      </div></div>
+      <div class="mat" data-theme="light"><div class="win dd">
+        <div class="win__title"><svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1c1917"/><circle cx="32" cy="32" r="26" fill="none" stroke="#d6a84a" stroke-width="3"/><rect x="24" y="12" width="16" height="26" rx="8" fill="#efe6d6"/><path d="M18 30a14 14 0 0 0 28 0M32 44v8M23 52h18" stroke="#efe6d6" stroke-width="5" fill="none"/></svg><span>Custom words - Deepgram Dictation</span><span class="x"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.2"/></svg></span></div>
+        <div class="win__body">
+          <div><h3 class="disp">Custom words</h3><p class="sub">Deepgram listens for these names and words.</p></div>
+          <div class="panel">
+            <div>
+              <p class="label plate">Add a word or phrase</p>
+              <div style="display:flex;gap:8px"><div class="field" style="flex:1"><input type="text" id="w2" placeholder="Name or phrase" aria-label="Add a word or phrase"></div><button type="button" class="btn" style="min-width:80px">Add</button></div>
+            </div>
+            <div>
+              <div class="list">
+                <div>Deepgram</div><div>GitHub Actions</div><div data-sel>Kubernetes</div><div>Dr. Okafor</div><div>Rawas</div><div>SignPath</div>
+              </div>
+              <div class="count" style="margin-top:10px"><span>6 words · about 70 of 500 tokens</span><span class="meterline"><i style="width:14%"></i></span></div>
+            </div>
+          </div>
+          <p class="status err">The list is too long. Remove some words or the app dictates without them.</p>
+        </div>
+        <div class="win__foot"><button type="button" class="btn">Remove</button><button type="button" class="btn">Cancel</button><button type="button" class="btn primary">Save</button></div>
+      </div></div>
+    </div></div>
+  </section>
+
+  <!-- 5. Tray -->
+  <section class="section">
+    <h2>Tray icon, menu and balloon</h2>
+    <p>The mark is a round-cornered tile with the microphone cut out, white on a dark taskbar and near-black on a light one. The state dot is a small lamp in the lower right corner with a dark gap around it. The menu is a bezel; the pointed row glows brass.</p>
+    <div class="scroll"><div class="row" style="align-items:center">
+      <div class="traystrip" data-theme="dark" id="tray-dark"></div>
+      <div class="traystrip" data-theme="light" id="tray-light"></div>
+    </div></div>
+    <div class="scroll"><div class="row">
+      <div class="mat" data-theme="dark"><div class="menu dd">
+        <div class="dim"><span class="chk"></span><span>Deepgram Dictation</span></div>
+        <div class="dim"><span class="chk"></span><span>Ready. Press Alt+M to dictate.</span></div>
+        <hr>
+        <div class="hover"><span class="chk"></span><span>Start dictation</span><kbd>Alt+M</kbd></div>
+        <hr>
+        <div><span class="chk"></span><span>Settings…</span></div>
+        <div><span class="chk"></span><span>Custom words…</span></div>
+        <div><span class="chk"><svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5l3.5 3.5L11 1" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></span><span>Start at login</span></div>
+        <div><span class="chk"></span><span>Open log file</span></div>
+        <hr>
+        <div><span class="chk"></span><span>Quit</span><kbd>Ctrl+Alt+Q</kbd></div>
+      </div></div>
+      <div class="mat" data-theme="light"><div class="menu dd">
+        <div class="dim"><span class="chk"></span><span>Deepgram Dictation</span></div>
+        <div class="dim"><span class="chk"></span><span>Recording. Press Alt+M to stop.</span></div>
+        <hr>
+        <div><span class="chk"></span><span>Stop dictation</span><kbd>Alt+M</kbd></div>
+        <hr>
+        <div class="hover"><span class="chk"></span><span>Settings…</span></div>
+        <div><span class="chk"></span><span>Custom words…</span></div>
+        <div><span class="chk"><svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5l3.5 3.5L11 1" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></span><span>Start at login</span></div>
+        <div><span class="chk"></span><span>Open log file</span></div>
+        <hr>
+        <div><span class="chk"></span><span>Quit</span><kbd>Ctrl+Alt+Q</kbd></div>
+      </div></div>
+    </div></div>
+    <div class="scroll"><div class="row">
+      <div class="mat" data-theme="dark"><div class="toast dd">
+        <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1c1917"/><circle cx="32" cy="32" r="26" fill="none" stroke="#d6a84a" stroke-width="3"/><rect x="24" y="12" width="16" height="26" rx="8" fill="#efe6d6"/><path d="M18 30a14 14 0 0 0 28 0M32 44v8M23 52h18" stroke="#efe6d6" stroke-width="5" fill="none"/></svg>
+        <div><b>Microphone unavailable</b><small>Another app may hold the microphone, or Windows does not allow microphone access.</small></div>
+      </div><p class="cap" style="color:rgba(255,255,255,0.6)">Windows draws the balloon. Only the icon and the words are ours.</p></div>
+      <div class="mat" data-theme="light"><div class="toast dd">
+        <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1c1917"/><circle cx="32" cy="32" r="26" fill="none" stroke="#d6a84a" stroke-width="3"/><rect x="24" y="12" width="16" height="26" rx="8" fill="#efe6d6"/><path d="M18 30a14 14 0 0 0 28 0M32 44v8M23 52h18" stroke="#efe6d6" stroke-width="5" fill="none"/></svg>
+        <div><b>Window changed - text copied</b><small>The rest of the dictation is on the clipboard. Press Ctrl+V where you want it.</small></div>
+      </div><p class="cap" style="color:rgba(0,0,0,0.6)">The same balloon in Windows light mode.</p></div>
+    </div></div>
+  </section>
+
+  <!-- 6. App icon -->
+  <section class="section">
+    <h2>App icon</h2>
+    <p>A round-cornered bakelite tile with a brass ring and the cream microphone. Below 24 px the ring and the bars go and the microphone stays.</p>
+    <div class="icons" id="appicons"></div>
+  </section>
+
+  <!-- 7. Tokens -->
+  <section class="section">
+    <h2>Tokens</h2>
+    <p>The dark values behind this direction. Names are the shared contract in <code>design/system/tokens.css</code>; the cream enamel set for light mode is in the same file.</p>
+    <div class="chips" id="chips"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- the lamp and the VU: inline SVG, one stroke weight, drawn once ---- */
+  var LAMP = '<span class="meter__well"><span class="meter__lamp"></span></span><span class="meter__tag"></span>';
+  var VU =
+    '<svg width="150" height="44" viewBox="0 0 150 44" aria-hidden="true">' +
+    '<path class="scale" d="M42.9 21.7A50 50 0 0 1 95.3 14.3" stroke-width="1.5"/>' +
+    '<path class="red" d="M95.3 14.3A50 50 0 0 1 107.1 21.7" stroke-width="2.5"/>' +
+    '<path class="scale" d="M45.4 24.8L42.9 21.7M67 14.7L66.3 10.8M81.4 14.4L82 10.5M93.7 18L95.3 14.3" stroke-width="1"/>' +
+    '<path class="red" d="M104.6 24.8L107.1 21.7" stroke-width="1"/>' +
+    '<text class="num" x="46" y="34" text-anchor="middle">-20</text>' +
+    '<text class="num" x="66" y="8.5" text-anchor="middle">-10</text>' +
+    '<text class="num" x="83" y="8.5" text-anchor="middle">-5</text>' +
+    '<text class="num hot" x="97" y="11" text-anchor="middle">0</text>' +
+    '<text class="num hot" x="104" y="34" text-anchor="middle">+3</text>' +
+    '<line class="needle" x1="75" y1="60" x2="75" y2="9"/>' +
+    '<circle class="pivot" cx="75" cy="60" r="18"/>' +
+    '</svg>';
+  var TAGS = { rec: 'On air', pause: 'Stby', work: 'Proc', info: 'Note', error: 'Err', hidden: '' };
+
+  function buildMeter(el) {
+    el.innerHTML = '<div class="meter__mark">' + LAMP + '</div><div class="meter__level">' + VU + '</div><div class="meter__word"></div>';
+  }
+  function setNeedle(el, v) {
+    var n = el.querySelector('.needle');
+    if (n) n.style.transform = 'rotate(' + Math.round((-40 + 80 * Math.min(1, Math.max(0, v))) * 10) / 10 + 'deg)';
+  }
+  function paintLevel(el, hist) { setNeedle(el, hist[hist.length - 1] || 0); }
+  function setState(el, state, word) {
+    el.setAttribute('data-state', state);
+    el.querySelector('.meter__word').textContent = word;
+    el.querySelector('.meter__tag').textContent = TAGS[state] || '';
+    if (state !== 'rec' && state !== 'pause') setNeedle(el, 0);
+  }
+  function fmt(s) { s = Math.floor(s); return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); }
+
+  /* ---- a speech-like level source ---- */
+  function Voice() { this.t = 0; this.level = 0; this.hist = []; for (var i = 0; i < 40; i++) this.hist.push(0); }
+  Voice.prototype.step = function (talking) {
+    this.t += 1 / 30;
+    var t = this.t;
+    var on = talking && (Math.sin(t * 0.9) + Math.sin(t * 2.3)) > -0.6;
+    var target = on ? 0.3 + 0.6 * Math.abs(Math.sin(t * 7.1) * Math.sin(t * 3.3)) + Math.random() * 0.12 : 0.03 + Math.random() * 0.04;
+    this.level += (target - this.level) * 0.5;
+    this.hist.push(Math.min(1, this.level)); this.hist.shift();
+  };
+
+  /* ---- the live demo ---- */
+  var live = document.getElementById('live');
+  buildMeter(live);
+  var voice = new Voice();
+  var demo = { state: 'hidden', since: 0, auto: true, rec: 0 };
+  var SCRIPT = [['hidden', 1.2], ['rec', 6], ['pause', 3], ['rec', 2.6], ['work', 2.2], ['hidden', 1.4], ['info', 2.4], ['hidden', 1.2], ['error', 3.2], ['hidden', 2]];
+  var cursor = 0;
+  var stage = document.getElementById('stage');
+  function go(state) {
+    demo.state = state; demo.since = 0;
+    if (state === 'rec' && live.getAttribute('data-state') !== 'pause') demo.rec = 0;
+    var word = state === 'rec' ? fmt(demo.rec) : state === 'pause' ? 'Paused' : state === 'work' ? 'Transcribing' : state === 'info' ? 'Window changed - text copied' : state === 'error' ? 'Microphone unavailable' : '';
+    setState(live, state, word);
+    paintTray(document.getElementById('tray-live'), state === 'rec' || state === 'pause' ? 'rec' : state === 'work' ? 'work' : state === 'error' ? 'problem' : 'none', stage.getAttribute('data-theme') === 'dark');
+  }
+  function tick() {
+    demo.since += 1 / 30;
+    if (demo.state === 'rec') demo.rec += 1 / 30;
+    voice.step(demo.state === 'rec' || demo.state === 'pause');
+    if (demo.state === 'rec' || demo.state === 'pause') { paintLevel(live, voice.hist); }
+    if (demo.state === 'rec') live.querySelector('.meter__word').textContent = fmt(demo.rec);
+    if (demo.auto) {
+      var cur = SCRIPT[cursor];
+      if (demo.since >= cur[1]) { cursor = (cursor + 1) % SCRIPT.length; go(SCRIPT[cursor][0]); }
+    }
+  }
+  function stillLevel() { var h = []; for (var i = 0; i < 40; i++) h.push(0.2 + 0.6 * Math.abs(Math.sin(i * 0.7))); return h; }
+  go('hidden');
+  if (!reduced) setInterval(tick, 33); else { demo.auto = false; go('rec'); paintLevel(live, stillLevel()); setState(live, 'rec', '0:12'); }
+  document.getElementById('demo-btns').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var s = b.getAttribute('data-go');
+    if (s === 'auto') { demo.auto = true; cursor = 0; go('hidden'); return; }
+    demo.auto = false; go(s);
+    if (reduced && (s === 'rec' || s === 'pause')) { paintLevel(live, stillLevel()); if (s === 'rec') setState(live, 'rec', '0:12'); }
+  });
+
+  /* ---- Windows mode of the stage ---- */
+  function mode(m) {
+    stage.setAttribute('data-theme', m);
+    document.getElementById('mode-dark').setAttribute('aria-pressed', m === 'dark');
+    document.getElementById('mode-light').setAttribute('aria-pressed', m === 'light');
+    paintTray(document.getElementById('tray-live'), 'none', m === 'dark');
+  }
+  document.getElementById('mode-dark').addEventListener('click', function () { mode('dark'); });
+  document.getElementById('mode-light').addEventListener('click', function () { mode('light'); });
+
+  /* ---- every state, static, in both modes ---- */
+  var fixed = []; for (var k = 0; k < 40; k++) fixed.push(Math.max(0.03, 0.15 + 0.75 * Math.abs(Math.sin(k * 0.55) * Math.sin(k * 0.21))));
+  fixed[fixed.length - 1] = 0.62;
+  var STATES = [['rec', '0:12', 'Recording'], ['pause', 'Paused', 'Paused: another window has focus, live paste waits'], ['work', 'Transcribing', 'Transcribing: the needle rests, the green lamp carries the state'], ['info', 'Window changed - text copied', 'Notice'], ['error', 'Microphone unavailable', 'Error: the lamp blinks']];
+  var statesEl = document.getElementById('states');
+  ['dark', 'light'].forEach(function (theme) {
+    var col = document.createElement('div'); col.className = 'mat'; col.setAttribute('data-theme', theme); col.style.display = 'grid'; col.style.gap = '16px';
+    STATES.forEach(function (s) {
+      var wrap = document.createElement('div'); wrap.style.display = 'grid'; wrap.style.gap = '6px';
+      var m = document.createElement('div'); m.className = 'meter dd'; buildMeter(m); setState(m, s[0], s[1]); if (s[0] === 'rec' || s[0] === 'pause') paintLevel(m, fixed);
+      var c = document.createElement('span'); c.className = 'cap'; c.style.margin = '0'; c.style.color = theme === 'dark' ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.65)'; c.textContent = s[2];
+      wrap.appendChild(m); wrap.appendChild(c); col.appendChild(wrap);
+    });
+    statesEl.appendChild(col);
+  });
+
+  /* ---- tray icons: the mark with the mic cut out, a lamp in the corner ---- */
+  function trayIcon(dot, dark) {
+    var fg = dark ? '#ffffff' : '#1a1a1a';
+    var col = { none: '', rec: dark ? '#ff3b2f' : '#c62828', work: dark ? '#3ddc84' : '#1e7a46', problem: dark ? '#ffb02e' : '#b26a00' }[dot];
+    var id = 'm' + (dark ? 'd' : 'l') + dot;
+    return '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><defs><mask id="' + id + '"><rect width="16" height="16" fill="#fff"/><rect x="6.6" y="3.2" width="2.8" height="5.6" rx="1.4" fill="#000"/><path d="M5.2 7.6a2.8 2.8 0 0 0 5.6 0M8 10.4v2M3.4 6.6v2.8M12.6 6.6v2.8" stroke="#000" stroke-width="1.2" fill="none"/>' + (dot !== 'none' ? '<circle cx="12.8" cy="12.8" r="3.8" fill="#000"/>' : '') + '</mask></defs><rect x="1" y="1" width="14" height="14" rx="3.5" fill="' + fg + '" mask="url(#' + id + ')"/>' + (dot !== 'none' ? '<circle cx="12.8" cy="12.8" r="2.8" fill="' + col + '"/>' : '') + '</svg>';
+  }
+  function paintTray(el, dot, dark) { el.innerHTML = trayIcon(dot, dark); }
+  [['tray-dark', true], ['tray-light', false]].forEach(function (p) {
+    var el = document.getElementById(p[0]);
+    [['none', 'Ready'], ['rec', 'Recording'], ['work', 'Transcribing'], ['problem', 'Problem']].forEach(function (d) {
+      el.insertAdjacentHTML('beforeend', '<figure>' + trayIcon(d[0], p[1]) + '<figcaption>' + d[1] + '</figcaption></figure>');
+    });
+  });
+
+  /* ---- app icon: bakelite tile, brass ring, cream mic ---- */
+  function appIcon(px) {
+    var big = px >= 24;
+    return '<svg width="' + px + '" height="' + px + '" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1c1917"/>' +
+      (big ? '<circle cx="32" cy="32" r="26" fill="none" stroke="#d6a84a" stroke-width="2.5"/><rect x="25" y="13" width="14" height="24" rx="7" fill="#efe6d6"/><path d="M19 31a13 13 0 0 0 26 0M32 44v7M25 51h14M14 26v10M50 26v10" stroke="#efe6d6" stroke-width="3.5" fill="none"/>'
+           : '<rect x="24" y="10" width="16" height="28" rx="8" fill="#efe6d6"/><path d="M17 30a15 15 0 0 0 30 0M32 45v9M22 54h20" stroke="#efe6d6" stroke-width="5" fill="none"/>') + '</svg>';
+  }
+  var ic = document.getElementById('appicons');
+  [[128, '128 px'], [48, '48 px'], [32, '32 px'], [16, '16 px']].forEach(function (p) { ic.insertAdjacentHTML('beforeend', '<figure>' + appIcon(p[0]) + '<figcaption>' + p[1] + '</figcaption></figure>'); });
+
+  /* ---- token chips ---- */
+  var cs = getComputedStyle(document.querySelector('.mat[data-theme="dark"] .dd'));
+  var names = ['ground', 'panel', 'panel-edge', 'field', 'field-edge', 'field-focus', 'ink', 'ink-2', 'ink-3', 'line', 'accent', 'on-accent', 'rec', 'pause', 'work', 'problem', 'info', 'level-0', 'level-1', 'level-2'];
+  var chips = document.getElementById('chips');
+  names.forEach(function (n) {
+    var v = cs.getPropertyValue('--dd-' + n).trim();
+    chips.insertAdjacentHTML('beforeend', '<div class="chip"><i style="background:' + v + '"></i><b>' + n + '</b><code>' + v + '</code></div>');
+  });
+  ['font: Bahnschrift (fallback Barlow Semi Condensed)', 'display: Bahnschrift SemiBold Condensed, uppercase, +0.12em', 'numbers: Bahnschrift 24 px, tabular', 'radius: 3 / 6 / 10, meter 12', 'stroke: 1 px', 'meter: 380 x 64', 'follows Windows mode: yes, cream enamel'].forEach(function (t) {
+    chips.insertAdjacentHTML('beforeend', '<div class="chip"><i style="background:var(--pg-card)"></i><b>' + t.split(':')[0] + '</b><code>' + t.split(':').slice(1).join(':').trim() + '</code></div>');
+  });
+})();
+</script>
