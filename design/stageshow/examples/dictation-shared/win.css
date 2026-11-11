@@ -1,0 +1,124 @@
+/* Windows 11 chrome, the taskbar and the keycaps. Scoped under .dd. */
+.dd .dd-win {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--ss-canvas);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 30px 60px -12px rgba(0, 0, 0, 0.6);
+  font-family: var(--ss-font);
+  color: var(--ss-text-strong);
+}
+
+.dd .dd-win__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding-left: 8px;
+}
+
+.dd .dd-win__icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+
+.dd .dd-win__title {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ss-text-strong);
+  white-space: nowrap;
+}
+
+.dd .dd-win__caption {
+  display: flex;
+  height: 100%;
+  margin-left: auto;
+}
+
+.dd .dd-win__cap {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 32px;
+  color: var(--ss-text-strong);
+}
+
+.dd .dd-win__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The taskbar runs off both sides and the bottom of the stage */
+.dd .dd-taskbar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  background: #202020;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.dd .dd-taskbar__tray {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  padding-right: 14px;
+  color: #e6e6e6;
+}
+
+.dd .dd-taskbar__clock {
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+  margin-left: 4px;
+}
+
+/* Keycaps: the kit's own cap drawn with Windows names, bottom-left */
+.dd .dd-keys {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 99;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  will-change: transform;
+  transform: translateY(6px) scale(0.96);
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.dd .dd-keys[data-show] {
+  opacity: 1;
+  transform: none;
+}
+
+.dd .dd-key {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: rgba(40, 40, 44, 0.96);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 4px 12px rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font: 500 13px/1 var(--ss-font);
+  will-change: transform;
+  transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
+}
+
+.dd .dd-key[data-down] {
+  transform: translateY(1px) scale(0.94);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 2px 6px rgba(0, 0, 0, 0.3);
+}

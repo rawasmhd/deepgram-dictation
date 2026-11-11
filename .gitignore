@@ -22,3 +22,10 @@ rust/target/
 
 # Benchmark log
 bench/bench.log
+
+# Stageshow (design/stageshow): installed packages and filmed shots
+.agents/skills/stageshow/node_modules/
+design/stageshow/node_modules/
+design/stageshow/shots/
+# the demos are synced into the skill for filming; their source is design/stageshow
+.agents/skills/stageshow/examples/dictation-*/

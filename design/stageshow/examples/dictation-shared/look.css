@@ -1,0 +1,36 @@
+/* The app's look: Windows 11 dark mode, the colours from rust/src/setup.rs
+   (the windows) and rust/src/overlay.rs (the meter). Every stage of the
+   product takes className="dd" and theme="dark". */
+.dd .ss-stage[data-theme='dark'] {
+  --ss-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --ss-accent: #4cc2a8;
+  --ss-accent-2: #3b9edb;
+  --ss-accent-soft: rgba(76, 194, 168, 0.18);
+  --ss-accent-text: #5fd4ba;
+  --ss-canvas: #202020;
+  --ss-surface: #2b2b2b;
+  --ss-chrome: #202020;
+  --ss-raised: #323232;
+  --ss-well: #0e0e10;
+  --ss-line: #383838;
+  --ss-line-faint: #2e2e2e;
+  --ss-text-strong: #ffffff;
+  --ss-text: #c5c5c5;
+  --ss-text-faint: #8b8b8b;
+  --ss-icon: #c5c5c5;
+  --ss-icon-faint: #6e6e6e;
+  --ss-ink-5: #4a4a4a;
+  --ss-warning-text: #f5b942;
+  --ss-radius-sm: 4px;
+  --ss-radius-md: 4px;
+  --ss-radius-lg: 8px;
+  --ss-radius-window: 8px;
+  --ss-control: 36px;
+  --ss-row: 32px;
+}
+
+.dd .ss-stage {
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--ss-well);
+}

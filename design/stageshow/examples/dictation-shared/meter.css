@@ -1,0 +1,109 @@
+/* The meter: overlay.rs's panel, edge, shadow and text. Scoped under .dd. */
+.dd .dd-meter {
+  position: absolute;
+  width: 336px;
+  height: 52px;
+  border-radius: 26px;
+  background: #17181d;
+  box-shadow: 0 0 0 1px #282a31, 0 4px 11px rgba(0, 0, 0, 0.3);
+  font-family: var(--ss-font);
+  will-change: transform;
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The bars sit in their own box, from x=40 to the last bar; the dot or the
+   pause mark in another, centred on x=26. The words never share a box with
+   either */
+.dd .dd-meter__bars {
+  position: absolute;
+  top: 0;
+  left: 40px;
+}
+
+.dd .dd-meter__mark {
+  position: absolute;
+  top: 17px;
+  left: 17px;
+}
+
+.dd .dd-meter[data-state='hidden'] {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.dd .dd-meter svg {
+  display: block;
+}
+
+/* Bars under the Transcribing label leave as the label arrives */
+.dd .dd-meter__bar {
+  transition: opacity 0.2s ease;
+}
+
+.dd .dd-meter__bar[data-hidden] {
+  opacity: 0;
+}
+
+/* The dot and the timer leave first, then Transcribing arrives in the room
+   they left: never both half-visible in one frame */
+.dd .dd-meter__dot,
+.dd .dd-meter__pause {
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.dd .dd-meter__label[data-on] {
+  transition: opacity 0.2s ease 0.12s;
+}
+
+.dd .dd-meter__dot[data-on],
+.dd .dd-meter__pause[data-on] {
+  opacity: 1;
+}
+
+/* The halo breathes, as the real dot does */
+.dd .dd-meter__halo {
+  animation: dd-halo 1.26s ease-in-out infinite alternate;
+}
+
+@keyframes dd-halo {
+  from { opacity: 0.1; }
+  to { opacity: 0.28; }
+}
+
+.dd .dd-meter__text {
+  position: absolute;
+  top: 0;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: #e7e9ee;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.dd .dd-meter__text[data-on] {
+  opacity: 1;
+}
+
+.dd .dd-meter__timer,
+.dd .dd-meter__paused {
+  right: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dd .dd-meter__timer {
+  transition: opacity 0.1s ease;
+}
+
+.dd .dd-meter__paused {
+  color: #f5b942;
+}
+
+.dd .dd-meter__label {
+  left: 18px;
+}
