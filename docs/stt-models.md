@@ -12,7 +12,7 @@ WER (word error rate) is the share of words the model gets wrong. Lower is bette
 | Model | Deepgram `nova-3`, cloud API |
 | Mode | Streaming over WebSocket (default). Batch upload is the fallback. |
 | Language | `en` (can change in `PARAMS`) |
-| Options we use | `smart_format`, `punctuate`, `dictation`, `filler_words=false`, `keyterm` (from `words.txt`, if it exists) |
+| Options we use | `smart_format`, `punctuate`, `dictation=false`, `filler_words=false`, `keyterm` (from `words.txt`, if it exists) |
 | Cost | $0.0077/min streaming, $0.0043/min batch |
 | Needs | Internet and a Deepgram API key |
 
@@ -50,7 +50,7 @@ A new model must pass all of the "Must" checks. Otherwise we do not switch.
 | Runs on Windows | Must | Main platform |
 | Text ready in about 1 s or less after you stop talking | Must | Streaming gives this now |
 | Punctuation and capitalization | Must | `punctuate`, `smart_format` |
-| Spoken punctuation ("comma" → ",") | Should | `dictation` option |
+| Spoken punctuation ("comma" → ",") | Should | Off. Deepgram's `dictation` option also turns every spoken "point" into a period (#66). Our own layer is planned (#67). |
 | No filler words ("um", "uh") | Should | `filler_words=false` |
 | Other languages | Should | Now one `PARAMS` change |
 | Custom words (key terms) | Nice | Nova-3 accepts up to 100 |
