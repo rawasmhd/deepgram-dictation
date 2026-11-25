@@ -121,4 +121,62 @@ mod tests {
         lp.step("one more", true, |_| { called = true; true });
         assert!(!called);
     }
+
+    use hegel::generators as gs;
+    use hegel::{tuples, Generator, TestCase};
+
+    /// For any run of growing transcripts, focus changes and paste
+    /// results: the text that reached the window is exactly
+    /// `pasted_text()`, which is always the start of the transcript.
+    #[hegel::test]
+    fn pasted_text_is_what_reached_the_window(tc: TestCase) {
+        // each step: the text added to the transcript, whether the start
+        // window has focus, and whether the paste succeeds
+        let steps: Vec<(String, bool, bool)> = tc.draw(gs::vecs(tuples!(gs::text(), gs::booleans(), gs::booleans())));
+        let mut lp = live();
+        let mut text = String::new();
+        let mut window = String::new();
+        let mut paused = false;
+        for (added, focused, ok) in steps {
+            text.push_str(&added);
+            let before = lp.pasted_text().to_string();
+            let mut calls = Vec::new();
+            let change = lp.step(&text, focused, |t| { calls.push(t.to_string()); if ok { window.push_str(t); } ok });
+            // paste is called once, only with new text, only while focused
+            let new = &text[before.len()..];
+            if focused && !new.is_empty() {
+                assert_eq!(calls, [new]);
+            } else {
+                assert!(calls.is_empty());
+            }
+            assert!(text.starts_with(lp.pasted_text()));
+            assert_eq!(lp.pasted_text(), window);
+            assert_eq!(lp.complete(&text), lp.pasted_text() == text);
+            if focused && ok {
+                assert!(lp.complete(&text));
+            }
+            // the paused state is reported only when it changes
+            assert_eq!(change, (!focused != paused).then_some(!focused));
+            paused = !focused;
+        }
+    }
+
+    /// A transcript that does not start with the pasted text stops live
+    /// paste: no later step pastes or reports anything.
+    #[hegel::test]
+    fn a_changed_transcript_stops_every_later_step(tc: TestCase) {
+        let first: String = tc.draw(gs::text().min_size(1));
+        let changed: String = tc.draw(gs::text().filter({ let first = first.clone(); move |t: &String| !t.starts_with(&first) }));
+        let later: Vec<(String, bool)> = tc.draw(gs::vecs(tuples!(gs::text(), gs::booleans())));
+        let mut lp = live();
+        lp.step(&first, true, |_| true);
+        assert!(lp.complete(&first));
+        let mut called = false;
+        assert_eq!(lp.step(&changed, true, |_| { called = true; true }), None);
+        for (text, focused) in later {
+            assert_eq!(lp.step(&text, focused, |_| { called = true; true }), None);
+        }
+        assert!(!called);
+        assert_eq!(lp.pasted_text(), first);
+    }
 }

@@ -287,4 +287,72 @@ Beta
         let missing = std::env::temp_dir().join("dictation-test-no-such-file.txt");
         assert!(Words::at(Some(missing)).for_request().is_empty());
     }
+
+    use hegel::generators as gs;
+    use hegel::{Generator, TestCase};
+
+    /// A term as it can come back from `parse`: trimmed, not empty, not a
+    /// comment, on one line.
+    fn is_term(t: &String) -> bool {
+        !t.is_empty() && t.trim() == t && !t.starts_with('#') && !t.contains('\n')
+    }
+
+    /// A list of terms with no duplicates (ignoring ASCII case).
+    fn terms() -> impl hegel::PrintableGenerator<Vec<String>> {
+        gs::vecs(gs::text().filter(is_term)).unique_by(|t: &String| t.to_ascii_lowercase())
+    }
+
+    /// Saving a list over any old file and reading it back gives the same list.
+    #[hegel::test]
+    fn render_then_parse_gives_the_terms_back(tc: TestCase) {
+        let old: String = tc.draw(gs::text());
+        let terms: Vec<String> = tc.draw(terms());
+        assert_eq!(parse(&render(&old, &terms)), terms);
+    }
+
+    /// Whatever is in the file, `parse` returns only clean terms.
+    #[hegel::test]
+    fn parse_returns_only_clean_terms(tc: TestCase) {
+        let text: String = tc.draw(gs::text());
+        let terms = parse(&text);
+        for (i, t) in terms.iter().enumerate() {
+            assert!(is_term(t), "{t:?}");
+            assert!(text.lines().any(|l| l.trim() == t), "{t:?} is not a line of the file");
+            assert!(!terms[..i].iter().any(|u| u.eq_ignore_ascii_case(t)), "{t:?} twice");
+        }
+    }
+
+    /// The file has Windows line endings only, whatever goes in.
+    #[hegel::test]
+    fn render_writes_windows_line_endings(tc: TestCase) {
+        let old: String = tc.draw(gs::text());
+        let terms: Vec<String> = tc.draw(gs::vecs(gs::text()));
+        let out = render(&old, &terms);
+        let bytes = out.as_bytes();
+        let bare = bytes.iter().enumerate().any(|(i, &b)| b == b'\n' && (i == 0 || bytes[i - 1] != b'\r'));
+        assert!(!bare, "a bare LF in {out:?}");
+        assert!(out.ends_with("\r\n"));
+    }
+
+    /// Only unreserved characters and %XX escapes go out, and decoding
+    /// them gives the term back.
+    #[hegel::test]
+    fn url_encode_is_safe_and_reversible(tc: TestCase) {
+        let term: String = tc.draw(gs::text());
+        let out = url_encode(&term);
+        let mut bytes = Vec::new();
+        let mut rest = out.as_str();
+        while let Some(c) = rest.chars().next() {
+            if c == '%' {
+                let hex = rest.get(1..3).unwrap_or_else(|| panic!("short escape in {out:?}"));
+                bytes.push(u8::from_str_radix(hex, 16).unwrap_or_else(|_| panic!("bad escape {hex:?} in {out:?}")));
+                rest = &rest[3..];
+            } else {
+                assert!(c.is_ascii_alphanumeric() || "-._~".contains(c), "{c:?} in {out:?}");
+                bytes.push(c as u8);
+                rest = &rest[1..];
+            }
+        }
+        assert_eq!(String::from_utf8(bytes).unwrap(), term);
+    }
 }
