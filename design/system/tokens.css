@@ -1,0 +1,249 @@
+/* Deepgram Dictation design tokens.
+   One contract, three candidate directions. The contract (the names) is
+   fixed. A direction sets the values. When a direction is chosen, the two
+   others are deleted and DESIGN.md records the survivor.
+
+   Use:  <html data-direction="prompter|tiles|studio" data-theme="dark|light">
+   The app follows Windows: data-theme is the Windows apps mode. A direction
+   may answer light mode with its dark values (Prompter does).
+
+   Every colour must be drawable with GDI: solid fills, hand-made gradients,
+   1 px strokes, per-pixel alpha on the meter. No blur, no filters. */
+
+/* ---- Contract: values that do not change between directions ---------- */
+:root {
+  /* spacing, 4 px grid */
+  --dd-space-1: 4px;
+  --dd-space-2: 8px;
+  --dd-space-3: 12px;
+  --dd-space-4: 16px;
+  --dd-space-5: 24px;
+  --dd-space-6: 32px;
+
+  /* type scale, fixed px (the app draws at 96 dpi and scales per monitor) */
+  --dd-text-xs: 12px;   /* help, counts */
+  --dd-text-sm: 13px;   /* meter words, menu shortcuts */
+  --dd-text-md: 14px;   /* body, fields, buttons, menu items */
+  --dd-text-lg: 16px;   /* section labels */
+  --dd-text-xl: 20px;   /* window title row */
+  --dd-text-2xl: 28px;  /* window heading */
+  --dd-text-3xl: 40px;  /* display (Tiles heading, Prompter timer) */
+
+  /* sizes */
+  --dd-control: 36px;      /* field and button height */
+  --dd-row: 32px;          /* list row, menu row */
+  --dd-window-w: 460px;    /* Settings and Custom words width */
+  --dd-icon: 16px;         /* tray icon grid */
+
+  /* motion: state changes only, never decoration */
+  --dd-fast: 120ms;
+  --dd-base: 200ms;
+  --dd-slow: 280ms;
+  --dd-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dd-frame: 33ms;        /* the meter redraws at ~30 fps */
+}
+
+/* ---- Contract: names every direction must set --------------------------
+   --dd-ground        window background
+   --dd-panel         meter body, menu, cards
+   --dd-panel-edge    1 px edge of a panel
+   --dd-field         text field background
+   --dd-field-edge    text field edge
+   --dd-field-focus   text field edge or underline when focused
+   --dd-ink           primary text
+   --dd-ink-2         secondary text
+   --dd-ink-3         faint text, disabled
+   --dd-line          separators
+   --dd-accent        the one live colour: primary action, selection, link, focus
+   --dd-on-accent     text on the accent
+   --dd-rec           recording
+   --dd-pause         paused (another window has focus)
+   --dd-work          transcribing
+   --dd-problem       error
+   --dd-info          notice that is not an error
+   --dd-level-0       meter level, idle bar or scale tick
+   --dd-level-1       meter level, speech
+   --dd-level-2       meter level, loud
+   --dd-shadow        a panel's shadow (box-shadow value, or none)
+   --dd-font          UI text
+   --dd-font-display  headings and the meter's words
+   --dd-font-num      the timer and counts
+   --dd-weight-body / --dd-weight-strong / --dd-weight-display
+   --dd-case-display  text-transform for headings and state words
+   --dd-track-display letter-spacing for headings and state words
+   --dd-radius-sm / --dd-radius-md / --dd-radius-lg / --dd-radius-meter
+   --dd-stroke        border width of fields and buttons
+   --dd-meter-w / --dd-meter-h
+   --dd-follows-windows  "yes" or "no": does light mode change the look
+   ----------------------------------------------------------------------- */
+
+/* ======================================================================
+   Direction A: PROMPTER
+   A teleprompter: black glass, large white type, a cue marker that shows
+   where you are. One theme only. Light mode does not change it.
+   ====================================================================== */
+[data-direction="prompter"] {
+  --dd-follows-windows: "no";
+  --dd-ground: #000000;
+  --dd-panel: #000000;
+  --dd-panel-edge: #2a2a2a;
+  --dd-field: #000000;
+  --dd-field-edge: #3d3d3d;
+  --dd-field-focus: #ffffff;
+  --dd-ink: #ffffff;
+  --dd-ink-2: #a6a6a6;
+  --dd-ink-3: #767676;
+  --dd-line: #262626;
+  --dd-accent: #ffffff;
+  --dd-on-accent: #000000;
+  --dd-rec: #ff2d2d;
+  --dd-pause: #ffb000;
+  --dd-work: #ffffff;
+  --dd-problem: #ff2d2d;
+  --dd-info: #a6a6a6;
+  --dd-level-0: #262626;
+  --dd-level-1: #ffffff;
+  --dd-level-2: #ffffff;
+  --dd-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  --dd-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --dd-font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --dd-font-num: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --dd-weight-body: 400;
+  --dd-weight-strong: 600;
+  --dd-weight-display: 600;
+  --dd-case-display: uppercase;
+  --dd-track-display: 0.08em;
+  --dd-radius-sm: 0px;
+  --dd-radius-md: 0px;
+  --dd-radius-lg: 0px;
+  --dd-radius-meter: 0px;
+  --dd-stroke: 1px;
+  --dd-meter-w: 420px;
+  --dd-meter-h: 56px;
+}
+
+/* ======================================================================
+   Direction B: TILES
+   Windows' own Metro: flat colour tiles on pure black or pure white, giant
+   lowercase Segoe, no chrome. One accent owns every live state.
+   ====================================================================== */
+[data-direction="tiles"] {
+  --dd-follows-windows: "yes";
+  --dd-ground: #000000;
+  --dd-panel: #1d1d1d;
+  --dd-panel-edge: transparent;
+  --dd-field: #ffffff;
+  --dd-field-edge: #ffffff;
+  --dd-field-focus: #00aba9;
+  --dd-ink: #ffffff;
+  --dd-ink-2: #9e9e9e;
+  --dd-ink-3: #8a8a8a;
+  --dd-line: #2c2c2c;
+  --dd-accent: #00aba9;
+  --dd-on-accent: #ffffff;
+  --dd-rec: #e51400;
+  --dd-pause: #f09609;
+  --dd-work: #1ba1e2;
+  --dd-problem: #e51400;
+  --dd-info: #00aba9;
+  --dd-level-0: rgba(255, 255, 255, 0.28);
+  --dd-level-1: #ffffff;
+  --dd-level-2: #ffffff;
+  --dd-shadow: none;
+  --dd-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --dd-font-display: "Segoe UI Variable Display", "Segoe UI Light", "Segoe UI", system-ui, sans-serif;
+  --dd-font-num: "Segoe UI Variable Display", "Segoe UI Light", "Segoe UI", system-ui, sans-serif;
+  --dd-weight-body: 400;
+  --dd-weight-strong: 600;
+  --dd-weight-display: 300;
+  --dd-case-display: lowercase;
+  --dd-track-display: -0.01em;
+  --dd-radius-sm: 0px;
+  --dd-radius-md: 0px;
+  --dd-radius-lg: 0px;
+  --dd-radius-meter: 0px;
+  --dd-stroke: 2px;
+  --dd-meter-w: 360px;
+  --dd-meter-h: 56px;
+  /* Tiles only: the field text is always black on white */
+  --dd-field-ink: #000000;
+}
+[data-direction="tiles"][data-theme="light"] {
+  --dd-ground: #ffffff;
+  --dd-panel: #ededed;
+  --dd-field: #ffffff;
+  --dd-field-edge: #000000;
+  --dd-ink: #000000;
+  --dd-ink-2: #5d5d5d;
+  --dd-ink-3: #6e6e6e;
+  --dd-line: #d9d9d9;
+  --dd-level-0: rgba(255, 255, 255, 0.35);
+}
+
+/* ======================================================================
+   Direction C: STUDIO
+   A broadcast studio: a bakelite panel with engraved cream labels, a red
+   ON AIR lamp, a VU needle. Light mode is the same desk in cream enamel.
+   ====================================================================== */
+[data-direction="studio"] {
+  --dd-follows-windows: "yes";
+  --dd-ground: #1c1917;
+  --dd-panel: #26221f;
+  --dd-panel-edge: #3d3631;
+  --dd-field: #15120f;
+  --dd-field-edge: #3d3631;
+  --dd-field-focus: #d6a84a;
+  --dd-ink: #efe6d6;
+  --dd-ink-2: #b4a893;
+  --dd-ink-3: #8f8373;
+  --dd-line: #3d3631;
+  --dd-accent: #d6a84a;
+  --dd-on-accent: #1c1917;
+  --dd-rec: #ff3b2f;
+  --dd-pause: #ffb02e;
+  --dd-work: #3ddc84;
+  --dd-problem: #ff3b2f;
+  --dd-info: #efe6d6;
+  --dd-level-0: #8a7f70;
+  --dd-level-1: #efe6d6;
+  --dd-level-2: #ff3b2f;
+  --dd-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  --dd-font: "Bahnschrift", "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --dd-font-display: "Bahnschrift SemiBold Condensed", "Bahnschrift", "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --dd-font-num: "Bahnschrift", "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif;
+  --dd-weight-body: 400;
+  --dd-weight-strong: 600;
+  --dd-weight-display: 600;
+  --dd-case-display: uppercase;
+  --dd-track-display: 0.12em;
+  --dd-radius-sm: 3px;
+  --dd-radius-md: 6px;
+  --dd-radius-lg: 10px;
+  --dd-radius-meter: 12px;
+  --dd-stroke: 1px;
+  --dd-meter-w: 380px;
+  --dd-meter-h: 64px;
+}
+[data-direction="studio"][data-theme="light"] {
+  --dd-ground: #efe9df;
+  --dd-panel: #f8f4ec;
+  --dd-panel-edge: #d6cdbd;
+  --dd-field: #ffffff;
+  --dd-field-edge: #cfc5b3;
+  --dd-field-focus: #9a6f1c;
+  --dd-ink: #1c1917;
+  --dd-ink-2: #5c544b;
+  --dd-ink-3: #7d7467;
+  --dd-line: #d6cdbd;
+  --dd-accent: #9a6f1c;
+  --dd-on-accent: #ffffff;
+  --dd-rec: #c62828;
+  --dd-pause: #b26a00;
+  --dd-work: #1e7a46;
+  --dd-problem: #c62828;
+  --dd-info: #1c1917;
+  --dd-level-0: #b3a893;
+  --dd-level-1: #1c1917;
+  --dd-level-2: #c62828;
+  --dd-shadow: 0 8px 22px rgba(60, 45, 20, 0.22);
+}

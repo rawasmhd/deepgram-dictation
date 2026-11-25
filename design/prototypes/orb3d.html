@@ -1,0 +1,360 @@
+<title>Dictation Orb 3D</title>
+<meta charset="utf-8">
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* SHELL: the proof sheet, as in the other prototypes */
+:root {
+  --pg-bg: #f3f2ef; --pg-fg: #1c1c1a; --pg-muted: #6a6a66; --pg-line: #dcdbd6; --pg-card: #ffffff; --pg-accent: #1c1c1a;
+  --pg-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --pg-bg: #151515; --pg-fg: #ececea; --pg-muted: #9c9c98; --pg-line: #2b2b2a; --pg-card: #1d1d1c; --pg-accent: #ececea; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --pg-bg: #151515; --pg-fg: #ececea; --pg-muted: #9c9c98; --pg-line: #2b2b2a; --pg-card: #1d1d1c; --pg-accent: #ececea; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--pg-bg); color: var(--pg-fg); font-family: var(--pg-font); font-size: 14px; line-height: 1.5; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet { max-width: 1120px; margin: 0 auto; display: grid; gap: 48px; }
+.sheet h1 { font-size: 32px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; text-wrap: balance; }
+.sheet h2 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+.lede { color: var(--pg-muted); margin: 0; max-width: 64ch; }
+.head { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid var(--pg-line); padding-bottom: 20px; }
+.section { display: grid; gap: 14px; }
+.section > p { color: var(--pg-muted); margin: 0; max-width: 72ch; }
+.row { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.scroll { overflow-x: auto; max-width: 100%; padding-bottom: 6px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btns button, .seg button { font: inherit; font-size: 13px; color: var(--pg-fg); background: var(--pg-card); border: 1px solid var(--pg-line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.btns button:hover, .seg button:hover { border-color: var(--pg-fg); }
+.btns button:focus-visible, .seg button:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--pg-line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button[aria-pressed="true"] { background: var(--pg-fg); color: var(--pg-bg); }
+.note { font-size: 12px; color: var(--pg-muted); }
+kbd { font: inherit; font-size: 12px; border: 1px solid var(--pg-line); border-radius: 4px; padding: 0 5px; }
+ul.plain { margin: 0; padding-left: 18px; color: var(--pg-muted); max-width: 72ch; }
+
+.stage { position: relative; width: 760px; height: 300px; overflow: hidden; border-radius: 10px; background: #2d3b4c; flex: none; }
+.stage[data-theme="light"] { background: #c6d0da; }
+.stage .wallwin { position: absolute; left: 60px; top: 24px; width: 420px; height: 240px; background: #1f2630; border-radius: 8px; opacity: 0.9; }
+.stage[data-theme="light"] .wallwin { background: #f6f7f9; }
+.stage .wallwin i { display: block; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.12); margin: 14px 18px 0; }
+.stage[data-theme="light"] .wallwin i { background: rgba(0,0,0,0.08); }
+.stage .wallwin i:nth-child(1) { width: 52%; margin-top: 44px; }
+.stage .wallwin i:nth-child(2) { width: 78%; }
+.stage .wallwin i:nth-child(3) { width: 64%; }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; background: #202020; display: flex; align-items: center; justify-content: center; gap: 18px; }
+.stage[data-theme="light"] .taskbar { background: #eeeeee; }
+.taskbar .tb { width: 20px; height: 20px; border-radius: 4px; background: rgba(255,255,255,0.22); }
+.stage[data-theme="light"] .taskbar .tb { background: rgba(0,0,0,0.18); }
+.taskbar .tb.start { background: #4cc2ff; }
+.taskbar .tray { position: absolute; right: 16px; top: 0; height: 48px; display: flex; align-items: center; gap: 14px; }
+.taskbar .tray .clock { font-size: 11px; color: rgba(255,255,255,0.8); line-height: 1.2; text-align: right; font-variant-numeric: tabular-nums; }
+.stage[data-theme="light"] .taskbar .tray .clock { color: rgba(0,0,0,0.75); }
+.taskbar .tray svg { display: block; }
+.orb-slot { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); }
+.mat { padding: 20px 24px; border-radius: 10px; background: #2d3b4c; flex: none; display: flex; flex-direction: column; gap: 18px; }
+.mat[data-theme="light"] { background: #c6d0da; }
+.mat figure { margin: 0; display: flex; align-items: center; gap: 16px; min-height: 36px; }
+.mat figcaption { font-size: 12px; color: rgba(255,255,255,0.75); min-width: 150px; font-family: var(--pg-font); }
+.mat[data-theme="light"] figcaption { color: rgba(0,0,0,0.7); }
+.big { display: grid; place-items: center; width: 300px; height: 220px; border-radius: 10px; background: #2d3b4c; flex: none; }
+@media (max-width: 820px) { .stage { width: 640px; } }
+
+/* =====================================================================
+   DIRECTION: ORB 3D
+   A small shaded sphere above the taskbar. Its colour is the state. Inside
+   it, a waveform of the last second of your voice, like a tiny scope.
+   A notice grows a pill with words beside the sphere.
+   ===================================================================== */
+.dd {
+  --dd-panel: #202020; --dd-panel-edge: rgba(255,255,255,0.10); --dd-ink: #f4f4f4; --dd-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  --dd-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --dd-orb: 36px; --dd-base: 200ms; --dd-slow: 280ms; --dd-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: var(--dd-font); font-size: 13px; color: var(--dd-ink);
+}
+[data-theme="light"] .dd { --dd-panel: #f7f7f7; --dd-panel-edge: rgba(0,0,0,0.10); --dd-ink: #1a1a1a; --dd-shadow: 0 2px 6px rgba(0,0,0,0.18); }
+.orb { position: relative; display: inline-flex; align-items: center; height: var(--dd-orb); border-radius: calc(var(--dd-orb) / 2); gap: 8px; white-space: nowrap; transition: opacity var(--dd-slow) var(--dd-ease), transform var(--dd-slow) var(--dd-ease), background var(--dd-base) ease, box-shadow var(--dd-base) ease; flex: none; }
+/* the canvas is larger than the sphere, for the glow beneath it */
+.orb canvas { display: block; width: calc(var(--dd-orb) * 1.6); height: calc(var(--dd-orb) * 1.6); margin: calc(var(--dd-orb) * -0.3); }
+.orb__text { display: none; font-size: 13px; line-height: 1; padding-right: 10px; }
+.orb[data-state="hidden"] { opacity: 0; transform: translateY(6px); }
+.orb[data-state="info"], .orb[data-state="error"] { background: var(--dd-panel); box-shadow: 0 0 0 1px var(--dd-panel-edge), var(--dd-shadow); }
+.orb[data-state="info"] .orb__text, .orb[data-state="error"] .orb__text { display: block; }
+</style>
+
+<div class="sheet">
+  <header class="head">
+    <div>
+      <h1>Orb 3D</h1>
+      <p class="lede">A small dark glass sphere above the taskbar, lit from inside: red while you talk, amber when another window has focus, blue while the words arrive. Two ways the voice can show inside it: as a liquid whose level is your voice, or as rings that ripple out at each louder moment. Only a notice adds a few words beside it.</p>
+    </div>
+    <div style="display:grid;gap:10px;justify-items:end">
+      <div class="seg" role="group" aria-label="What the voice looks like inside the sphere"><button type="button" id="look-liquid" aria-pressed="true">Liquid</button><button type="button" id="look-rings" aria-pressed="false">Rings</button></div>
+      <div class="seg" role="group" aria-label="Windows mode of the desktop"><button type="button" id="mode-dark" aria-pressed="true">Windows dark</button><button type="button" id="mode-light" aria-pressed="false">Windows light</button></div>
+      <p class="note">The notice pill follows Windows mode. The sphere does not change.</p>
+    </div>
+  </header>
+
+  <section class="section">
+    <h2>The orb, live</h2>
+    <p>36 px sphere, 12 px above the taskbar, centred. Never focusable, never clickable. Press the buttons or let it run.</p>
+    <div class="scroll">
+      <div class="stage" id="stage" data-theme="dark">
+        <div class="wallwin"><i></i><i></i><i></i></div>
+        <div class="orb-slot"><div class="orb dd" id="live" data-state="hidden"><canvas></canvas><span class="orb__text"></span></div></div>
+        <div class="taskbar">
+          <span class="tb start"></span><span class="tb"></span><span class="tb"></span><span class="tb"></span><span class="tb"></span>
+          <div class="tray"><span id="tray-live"></span><span class="tb" style="width:16px;height:16px"></span><span class="tb" style="width:16px;height:16px"></span><div class="clock">14:07<br>11/11/2026</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="btns" id="demo-btns">
+      <button type="button" data-go="rec"><kbd>Alt+M</kbd> start</button>
+      <button type="button" data-go="pause">switch window (Paused)</button>
+      <button type="button" data-go="work"><kbd>Alt+M</kbd> stop (Transcribing)</button>
+      <button type="button" data-go="info">notice</button>
+      <button type="button" data-go="error">error</button>
+      <button type="button" data-go="auto">auto-play</button>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Close up</h2>
+    <p>The same sphere at 160 px, so the shading and the movement can be judged. Recording, live. Switch between Liquid and Rings at the top.</p>
+    <div class="scroll"><div class="row"><div class="big"><div class="orb dd" id="big" data-state="rec" style="--dd-orb:160px"><canvas></canvas><span class="orb__text"></span></div></div></div></div>
+  </section>
+
+  <section class="section">
+    <h2>Every state</h2>
+    <p>Recording, Paused, Transcribing, a notice and an error, on a dark and a light desktop. While transcribing, the liquid rests at half with a slow swell, or the rings keep a steady beat.</p>
+    <div class="scroll"><div class="row">
+      <div class="mat" data-theme="dark" id="states-dark"></div>
+      <div class="mat" data-theme="light" id="states-light"></div>
+    </div></div>
+  </section>
+
+  <section class="section">
+    <h2>Sizes</h2>
+    <p>28, 36 and 44 px, recording. The tray icon beside each is 16 px for scale.</p>
+    <div class="scroll"><div class="row"><div class="mat" data-theme="dark" id="sizes"></div></div></div>
+  </section>
+
+  <section class="section">
+    <h2>Notes</h2>
+    <ul class="plain">
+      <li>The sphere is dark glass: a vertical gradient, a lit core in the state colour, a faint ring, a rim light on the upper left, one soft highlight, and a glow beneath. Liquid: the colour fills from the bottom to a level that follows the voice, with a two-wave surface and a paler back wave. Rings: one ring per rise in the level, growing and fading over 0.9 s. The app can draw all of it pixel by pixel, as it draws the meter today.</li>
+      <li>The level bars, the timer and the words go. The tray icon keeps its state dot.</li>
+      <li>Open: size (28 to 44), the amount of shading, and whether the waveform should keep a faint trace while paused.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var COLOR = { rec: '#ff4d57', pause: '#ffb340', work: '#4fb0ff', info: '#b8bcc6', error: '#ff4d57', hidden: '#b8bcc6' };
+  var WORDS = { rec: '', pause: '', work: '', info: 'Window changed - text copied', error: 'Microphone unavailable', hidden: '' };
+  var N = 40;
+  var LOOK = 'liquid';
+
+  function hex(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+  function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+  function css(c, a) { return 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + (a == null ? 1 : a) + ')'; }
+  var WHITE = [255, 255, 255], BLACK = [0, 0, 0];
+
+  /* draw one sphere: dark glass, a lit core in the state colour, a rim light,
+     and one glowing trace of the voice. The canvas is 1.6x the sphere. */
+  var GLASS_TOP = [44, 47, 56], GLASS_BOT = [14, 15, 20];
+  function draw(orb, t) {
+    var cv = orb.canvas, ctx = orb.ctx, size = orb.size, dpr = window.devicePixelRatio || 1;
+    var S = Math.round(size * 1.6);
+    if (cv.width !== S * dpr) { cv.width = S * dpr; cv.height = S * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, S, S);
+    var r = size / 2, cx = S / 2, cy = S / 2;
+    var base = orb.col, st = orb.state;
+    var lit = st === 'rec' || st === 'pause' || st === 'work';
+    var tint = mix(base, WHITE, 0.35);
+    // glow beneath the sphere, in the state colour
+    if (lit) {
+      var gl = ctx.createRadialGradient(cx, cy + r * 0.45, r * 0.2, cx, cy + r * 0.45, r * 1.45);
+      gl.addColorStop(0, css(base, 0.38)); gl.addColorStop(1, css(base, 0));
+      ctx.fillStyle = gl; ctx.fillRect(0, 0, S, S);
+    } else {
+      var sh = ctx.createRadialGradient(cx, cy + r * 0.5, r * 0.3, cx, cy + r * 0.5, r * 1.3);
+      sh.addColorStop(0, 'rgba(0,0,0,0.35)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = sh; ctx.fillRect(0, 0, S, S);
+    }
+    // glass body
+    var g = ctx.createLinearGradient(0, cy - r, 0, cy + r);
+    g.addColorStop(0, css(GLASS_TOP)); g.addColorStop(1, css(GLASS_BOT));
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+    // the lit core, low in the sphere
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip();
+    var core = ctx.createRadialGradient(cx, cy + r * 0.55, 0, cx, cy + r * 0.3, r * 1.1);
+    core.addColorStop(0, css(base, lit ? 0.85 : 0.55)); core.addColorStop(0.55, css(base, lit ? 0.28 : 0.18)); core.addColorStop(1, css(base, 0));
+    ctx.fillStyle = core; ctx.fillRect(0, 0, S, S);
+    if (LOOK === 'liquid') {
+      // the state colour as a liquid: its level is the voice, its surface sloshes
+      var lq = orb.liq, ys = cy + r * (0.95 - 1.7 * lq), a1 = r * (0.05 + 0.12 * lq), a2 = r * (0.03 + 0.08 * lq);
+      var surf = function (phase, lift) {
+        ctx.beginPath(); ctx.moveTo(cx - r, cy + r);
+        for (var k = 0; k <= 32; k++) {
+          var x = cx - r + 2 * r * k / 32, u = (x - cx) / r;
+          var y = ys - lift + a1 * Math.sin(u * 2.6 + t * 2.4 + phase) + a2 * Math.sin(u * 4.1 - t * 3.1 + phase * 1.7);
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(cx + r, cy + r); ctx.closePath();
+      };
+      surf(1.9, r * 0.07); ctx.fillStyle = css(mix(base, WHITE, 0.25), lit ? 0.35 : 0.2); ctx.fill();
+      surf(0, 0);
+      var lg = ctx.createLinearGradient(0, ys - r * 0.2, 0, cy + r);
+      lg.addColorStop(0, css(mix(base, WHITE, 0.3), lit ? 0.95 : 0.6)); lg.addColorStop(0.35, css(base, lit ? 0.85 : 0.5)); lg.addColorStop(1, css(mix(base, BLACK, 0.35), lit ? 0.9 : 0.5));
+      ctx.fillStyle = lg; ctx.fill();
+      ctx.restore();
+    } else {
+      // rings: a ripple leaves the core at each louder moment; the core brightens with the level
+      var v = orb.pulse;
+      var cg = ctx.createRadialGradient(cx, cy + r * 0.1, 0, cx, cy + r * 0.1, r * (0.35 + 0.55 * v));
+      cg.addColorStop(0, css(mix(base, WHITE, 0.45), lit ? 0.95 : 0.4)); cg.addColorStop(0.5, css(base, lit ? 0.5 : 0.2)); cg.addColorStop(1, css(base, 0));
+      ctx.fillStyle = cg; ctx.fillRect(0, 0, S, S);
+      ctx.lineWidth = Math.max(1, r * 0.06);
+      for (var q = 0; q < orb.rings.length; q++) {
+        var rg = orb.rings[q], age = rg.age;
+        var rr = r * (0.18 + 0.8 * age), al = (1 - age) * (1 - age) * 0.8 * rg.gain;
+        ctx.beginPath(); ctx.arc(cx, cy + r * 0.1, rr, 0, Math.PI * 2); ctx.strokeStyle = css(mix(base, WHITE, 0.45), al); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    // rim: a faint full ring, and a light on the upper left edge
+    ctx.beginPath(); ctx.arc(cx, cy, r - 0.5, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1; ctx.stroke();
+    var rim = ctx.createLinearGradient(cx - r, cy - r, cx + r * 0.3, cy + r * 0.3);
+    rim.addColorStop(0, 'rgba(255,255,255,0.55)'); rim.addColorStop(0.6, 'rgba(255,255,255,0.06)'); rim.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.beginPath(); ctx.arc(cx, cy, r - 0.75, Math.PI * 0.95, Math.PI * 1.75); ctx.strokeStyle = rim; ctx.lineWidth = Math.max(1, r * 0.05); ctx.stroke();
+    // one soft highlight
+    var h = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.5, 0, cx - r * 0.3, cy - r * 0.5, r * 0.5);
+    h.addColorStop(0, 'rgba(255,255,255,0.20)'); h.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip(); ctx.fillStyle = h; ctx.fillRect(0, 0, S, S); ctx.restore();
+  }
+  function smooth(ctx, p, cont) {
+    if (cont) ctx.lineTo(p[0][0], p[0][1]); else ctx.moveTo(p[0][0], p[0][1]);
+    for (var i = 1; i < p.length - 1; i++) { var mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2; ctx.quadraticCurveTo(p[i][0], p[i][1], mx, my); }
+    ctx.lineTo(p[p.length - 1][0], p[p.length - 1][1]);
+  }
+
+  /* an orb: element, canvas, colour that eases to the state colour, level history */
+  var orbs = [];
+  function Orb(el, size) {
+    this.el = el; this.size = size || parseInt(getComputedStyle(el).getPropertyValue('--dd-orb')) || 36;
+    this.canvas = el.querySelector('canvas'); this.ctx = this.canvas.getContext('2d');
+    this.state = el.getAttribute('data-state') || 'hidden'; this.col = hex(COLOR[this.state]); this.target = this.col;
+    this.hist = []; for (var i = 0; i < N; i++) this.hist.push(0.04);
+    this.liq = 0.1; this.pulse = 0.1; this.rings = []; this.last = 0; this.since = 9;
+    orbs.push(this);
+  }
+  Orb.prototype.set = function (state) { this.state = state; this.target = hex(COLOR[state]); this.el.setAttribute('data-state', state); this.el.querySelector('.orb__text').textContent = WORDS[state]; };
+  /* feed one level sample: the liquid follows it slowly, the rings fire on a rise */
+  Orb.prototype.push = function (v) {
+    this.hist.push(v); this.hist.shift();
+    var st = this.state, live = st === 'rec' || st === 'pause';
+    var goal = live ? v : st === 'work' ? 0.45 + 0.08 * Math.sin(this.since * 2.5) : 0.1;
+    this.liq += (goal - this.liq) * (goal > this.liq ? 0.18 : 0.07);
+    this.pulse += (goal - this.pulse) * 0.3;
+    this.since += 1 / 30;
+    for (var i = this.rings.length - 1; i >= 0; i--) { this.rings[i].age += 1 / 30 / 0.9; if (this.rings[i].age >= 1) this.rings.splice(i, 1); }
+    var fire = live ? (v > 0.45 && v > this.last + 0.06 && this.since > 0.22) : st === 'work' ? this.since > 0.7 : false;
+    if (fire) { this.rings.push({ age: 0, gain: live ? Math.min(1, v) : 0.6 }); this.since = 0; }
+    this.last = v;
+  };
+  Orb.prototype.still = function (level) { this.liq = level; this.pulse = level; this.rings = [{ age: 0.25, gain: 1 }, { age: 0.65, gain: 0.8 }]; };
+  Orb.prototype.frame = function (t) { this.col = mix(this.col, this.target, reduced ? 1 : 0.25); draw(this, t); };
+
+  function Voice() { this.t = 0; this.level = 0; }
+  Voice.prototype.step = function (talking) {
+    this.t += 1 / 30; var t = this.t;
+    var on = talking && (Math.sin(t * 0.9) + Math.sin(t * 2.3)) > -0.6;
+    var target = on ? 0.3 + 0.6 * Math.abs(Math.sin(t * 7.1) * Math.sin(t * 3.3)) + Math.random() * 0.12 : 0.03 + Math.random() * 0.04;
+    this.level += (target - this.level) * 0.5;
+    return Math.min(1, this.level);
+  };
+  function fixedHist() { var h = []; for (var k = 0; k < N; k++) h.push(Math.max(0.04, 0.12 + 0.75 * Math.abs(Math.sin(k * 0.55) * Math.sin(k * 0.21)))); return h; }
+
+  /* the live demo and the close-up share one voice */
+  var stage = document.getElementById('stage');
+  var live = new Orb(document.getElementById('live'));
+  var big = new Orb(document.getElementById('big'));
+  var voice = new Voice();
+  var demo = { state: 'hidden', since: 0, auto: true };
+  var SCRIPT = [['hidden', 1.2], ['rec', 6], ['pause', 3], ['rec', 2.6], ['work', 2.2], ['hidden', 1.4], ['info', 2.4], ['hidden', 1.2], ['error', 3.2], ['hidden', 2]];
+  var cursor = 0;
+  function go(state) {
+    demo.state = state; demo.since = 0; live.set(state); big.set(state === 'hidden' || state === 'info' || state === 'error' ? 'rec' : state);
+    paintTray(document.getElementById('tray-live'), state === 'rec' || state === 'pause' ? 'rec' : state === 'work' ? 'work' : state === 'error' ? 'problem' : 'none', stage.getAttribute('data-theme') === 'dark');
+  }
+  var clock = 0;
+  function tick() {
+    clock += 1 / 30; demo.since += 1 / 30;
+    var v = voice.step(demo.state === 'rec' || demo.state === 'pause' || demo.state === 'hidden');
+    live.push(v); big.push(v);
+    if (demo.auto) { var cur = SCRIPT[cursor]; if (demo.since >= cur[1]) { cursor = (cursor + 1) % SCRIPT.length; go(SCRIPT[cursor][0]); } }
+    for (var i = 0; i < orbs.length; i++) { var o = orbs[i]; if (o === live || o === big || o.state === 'work') o.frame(clock); }
+  }
+  go('hidden');
+  document.getElementById('demo-btns').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var s = b.getAttribute('data-go');
+    if (s === 'auto') { demo.auto = true; cursor = 0; go('hidden'); return; }
+    demo.auto = false; go(s);
+  });
+  function mode(m) {
+    stage.setAttribute('data-theme', m);
+    document.getElementById('mode-dark').setAttribute('aria-pressed', m === 'dark');
+    document.getElementById('mode-light').setAttribute('aria-pressed', m === 'light');
+    go(demo.state);
+  }
+  document.getElementById('mode-dark').addEventListener('click', function () { mode('dark'); });
+  document.getElementById('mode-light').addEventListener('click', function () { mode('light'); });
+
+  /* every state, static */
+  var STATES = [['rec', 'Recording'], ['pause', 'Paused'], ['work', 'Transcribing'], ['info', 'Notice'], ['error', 'Error']];
+  ['states-dark', 'states-light'].forEach(function (id) {
+    var mat = document.getElementById(id);
+    STATES.forEach(function (s) {
+      var f = document.createElement('figure');
+      f.innerHTML = '<figcaption>' + s[1] + '</figcaption><div class="orb dd" data-state="' + s[0] + '"><canvas></canvas><span class="orb__text"></span></div>';
+      mat.appendChild(f);
+      var o = new Orb(f.querySelector('.orb')); o.hist = fixedHist(); o.set(s[0]); o.still(s[0] === 'rec' || s[0] === 'pause' ? 0.6 : s[0] === 'work' ? 0.45 : 0.1); o.frame(0);
+    });
+  });
+  /* sizes */
+  var sizes = document.getElementById('sizes');
+  [28, 36, 44].forEach(function (px) {
+    var f = document.createElement('figure');
+    f.innerHTML = '<figcaption>' + px + ' px</figcaption><div class="orb dd" data-state="rec" style="--dd-orb:' + px + 'px"><canvas></canvas><span class="orb__text"></span></div><span style="margin-left:8px">' + trayIcon('rec', true) + '</span>';
+    sizes.appendChild(f);
+    var o = new Orb(f.querySelector('.orb'), px); o.hist = fixedHist(); o.set('rec'); o.still(0.6); o.frame(0);
+  });
+
+  /* the look switch */
+  function setLook(l) {
+    LOOK = l;
+    document.getElementById('look-liquid').setAttribute('aria-pressed', l === 'liquid');
+    document.getElementById('look-rings').setAttribute('aria-pressed', l === 'rings');
+    orbs.forEach(function (o) { o.frame(0); });
+  }
+  document.getElementById('look-liquid').addEventListener('click', function () { setLook('liquid'); });
+  document.getElementById('look-rings').addEventListener('click', function () { setLook('rings'); });
+
+  if (!reduced) setInterval(tick, 33);
+  else { demo.auto = false; live.hist = fixedHist(); big.hist = fixedHist(); go('rec'); live.still(0.6); big.still(0.6); orbs.forEach(function (o) { o.frame(0); }); }
+
+  function trayIcon(dot, dark) {
+    var fg = dark ? '#ffffff' : '#1a1a1a';
+    var col = { none: '', rec: dark ? '#f05454' : '#d13438', work: dark ? '#4aa3df' : '#1d6fa5', problem: dark ? '#f5b942' : '#b86e00' }[dot];
+    var id = 'm' + Math.floor(Math.random() * 1e9);
+    return '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><defs><mask id="' + id + '"><rect width="16" height="16" fill="#fff"/><rect x="6.6" y="3.4" width="2.8" height="5.2" rx="1.4" fill="#000"/><path d="M5.1 7.6a2.9 2.9 0 0 0 5.8 0M8 10.5v1.9M3.4 6.6v2.8M12.6 6.6v2.8" stroke="#000" stroke-width="1.3" fill="none"/>' + (dot !== 'none' ? '<circle cx="13" cy="12.8" r="3.5" fill="#000"/>' : '') + '</mask></defs><rect x="1" y="1" width="14" height="14" rx="3.5" fill="' + fg + '" mask="url(#' + id + ')"/>' + (dot !== 'none' ? '<circle cx="13" cy="12.8" r="2.7" fill="' + col + '"/>' : '') + '</svg>';
+  }
+  function paintTray(el, dot, dark) { el.innerHTML = trayIcon(dot, dark); }
+})();
+</script>
