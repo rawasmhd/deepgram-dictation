@@ -1,0 +1,5 @@
+/* The paused meter, centred 12px above the taskbar. */
+.dp .dp-meter {
+  top: 28px;
+  left: 62px;
+}

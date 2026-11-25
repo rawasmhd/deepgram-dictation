@@ -1,0 +1,98 @@
+/* The hero: corner bleed. The notes window sits one gutter from the top and
+   left and runs off the right and the bottom; the meter floats where the
+   product puts it, bottom centre; the keycaps sit bottom-left over filler. */
+.dh .dh-win {
+  top: 40px;
+  left: 40px;
+  width: 880px;
+  height: 360px;
+}
+
+.dh .dd-win__body {
+  display: flex;
+}
+
+.dh .dh-side {
+  display: grid;
+  flex: none;
+  align-content: start;
+  gap: 4px;
+  width: 180px;
+  padding: 8px 12px;
+  border-right: 1px solid var(--ss-line);
+}
+
+.dh .dh-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  margin-bottom: 8px;
+  padding: 0 10px;
+  border-radius: 4px;
+  background: var(--ss-ink-1);
+  color: var(--ss-icon-faint);
+}
+
+/* The keycaps sit in the empty band above the window's right half */
+.dh .dd-keys {
+  top: 6px;
+  right: 16px;
+  bottom: auto;
+  left: auto;
+}
+
+.dh .dh-note {
+  display: grid;
+  gap: 7px;
+  padding: 10px 10px;
+  border-radius: 4px;
+}
+
+.dh .dh-note[data-active] {
+  background: var(--ss-surface);
+}
+
+.dh .dh-editor {
+  flex: 1;
+  min-width: 0;
+  padding: 26px 32px;
+}
+
+.dh .dh-heading {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ss-text-strong);
+}
+
+.dh .dh-date {
+  margin: 10px 0 18px;
+}
+
+.dh .dh-para {
+  max-width: 400px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ss-text-strong);
+}
+
+.dh .dh-caret {
+  display: inline-block;
+  width: 1px;
+  height: 17px;
+  margin-left: 1px;
+  vertical-align: -3px;
+  background: #fff;
+  animation: dh-blink 1.06s steps(2, start) infinite;
+}
+
+@keyframes dh-blink {
+  to { visibility: hidden; }
+}
+
+/* Centred under the note's text column, clear of the sidebar line */
+.dh .dh-meter {
+  top: 264px;
+  left: 268px;
+}

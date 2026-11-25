@@ -7,7 +7,7 @@ Minimal push-to-talk dictation for Windows. Press **Alt+M**, speak, press **Alt+
 Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores no audio.
 
 <p align="center">
-  <img src="assets/meter.gif" alt="The floating meter: a red dot, live level bars and a timer while recording, then a Transcribing scan animation" width="460">
+  <img src="assets/dictation-hero.gif" alt="One dictation in a notes window: Alt+M opens the floating meter with a red dot, live level bars and a timer; each phrase is pasted into the note as it is final; Alt+M again shows Transcribing, then the rest is pasted and the meter goes" width="720">
 </p>
 
 ## Features
@@ -35,7 +35,7 @@ Audio goes to [Deepgram](https://deepgram.com) for transcription. The app stores
    - Keep **Start when I sign in to Windows** on, if you want it at every login.
    - Select **Save**.
 
-<img src="assets/settings.png" alt="The Settings window: a field for the Deepgram API key with a Show key button, a switch Start when I sign in to Windows, and Cancel and Save buttons" width="420">
+<img src="assets/dictation-settings.png" alt="The Settings window: a field for the Deepgram API key with a Show key button, and a switch Start when I sign in to Windows" width="640">
 
 That's it. Press **Alt+M** anywhere to dictate.
 
@@ -67,12 +67,12 @@ More:
 The meter while another window has focus:
 
 <p align="center">
-  <img src="assets/meter-paused.png" alt="The meter with an amber pause icon on the left and the word Paused on the right" width="460">
+  <img src="assets/dictation-paused.png" alt="The meter above the taskbar, with an amber pause icon on the left and the word Paused on the right" width="460">
 </p>
 
 The tray menu:
 
-<img src="assets/tray-menu.png" alt="The tray menu: Start dictation (Alt+M), Settings, Custom words, Start at login, Open log file, Quit (Ctrl+Alt+Q)" width="360">
+<img src="assets/dictation-tray.png" alt="The tray menu above the taskbar: Start dictation (Alt+M), Settings, Custom words, Start at login, Open log file, Quit (Ctrl+Alt+Q)" width="560">
 
 ## Settings
 
@@ -89,7 +89,7 @@ Deepgram can spell names, product names and other rare words wrong. To fix this,
 
 To edit the list, select the tray icon, then **Custom words…**. You can also run `dictation.exe --words`.
 
-<img src="assets/custom-words.png" alt="The Custom words window: a text field with an Add button, a list of words, a Remove button, a word count, and Save and Cancel" width="420">
+<img src="assets/dictation-words.png" alt="The Custom words window: a text field with an Add button and a list of words" width="640">
 
 - Type a word or phrase, then press **Enter** or select **Add**.
 - To remove a word, select it, then press **Delete** or select **Remove**.

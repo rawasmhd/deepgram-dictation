@@ -1,0 +1,82 @@
+/* Settings: the window whole across, off the bottom. */
+.ds .ds-win {
+  top: 24px;
+  left: 24px;
+  width: 592px;
+  height: 520px;
+}
+
+.ds .ds-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 22px 22px;
+}
+
+.ds .ds-head__words {
+  display: grid;
+  gap: 5px;
+}
+
+.ds .ds-title {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 30px;
+  color: var(--ss-text-strong);
+}
+
+.ds .ds-sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ss-text);
+}
+
+.ds .ds-card {
+  margin: 0 22px;
+  padding: 18px 18px 8px;
+  border-radius: 8px;
+  background: var(--ss-surface);
+  box-shadow: 0 0 0 1px var(--ss-line);
+}
+
+.ds .ds-field .ss-field__label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.ds .ds-field .ss-field__box {
+  background: #1f1f1f;
+  box-shadow: inset 0 0 0 1px #3a3a3a;
+}
+
+.ds .ds-help {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ss-text);
+}
+
+.ds .ds-link {
+  color: var(--ss-accent-text);
+}
+
+.ds .ds-rule {
+  height: 1px;
+  margin: 16px -18px 0;
+  background: var(--ss-line);
+}
+
+.ds .ds-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 12px;
+}
+
+.ds .ds-setting {
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--ss-text-strong);
+}

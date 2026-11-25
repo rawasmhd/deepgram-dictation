@@ -1,0 +1,51 @@
+/* The tray menu, from assets/tray-menu.png: rows 25 tall, labels 60px in,
+   separators nearly full width, the width set by its longest row. It opens
+   flush with the taskbar's top edge, its right edge over the tray icon it
+   came from (the icon's right edge is 154px from the stage's right). */
+.dt .dt-menu {
+  position: absolute;
+  right: 154px;
+  bottom: 48px;
+  width: 360px;
+  padding: 8px 0;
+  border-radius: 8px;
+  background: #2c2c2c;
+  box-shadow: 0 0 0 1px #3d3d3d, 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-family: var(--ss-font);
+}
+
+.dt .dt-group[data-sep]::before {
+  content: '';
+  display: block;
+  height: 1px;
+  margin: 4px 4px;
+  background: #3e3e3e;
+}
+
+.dt .dt-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 25px;
+  padding: 0 36px 0 60px;
+  font-size: 13px;
+  line-height: 25px;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.dt .dt-item[data-disabled] {
+  color: #8a8a8a;
+}
+
+.dt .dt-check {
+  position: absolute;
+  left: 28px;
+  top: 5px;
+  color: #ffffff;
+}
+
+.dt .dt-key {
+  margin-left: auto;
+  color: #ffffff;
+}
